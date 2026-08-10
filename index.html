@@ -756,9 +756,11 @@ function MahjongApp() {
   const [formValue, setFormValue] = useState('');
   const [roundStep, setRoundStep] = useState(1);
   const [quickPlayer, setQuickPlayer] = useState(null);
+  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 400);
   const [adjustAmt, setAdjustAmt] = useState('');
   const [transferTo, setTransferTo] = useState(null);
   const [transferAmt, setTransferAmt] = useState('');
+  const [lastRecap, setLastRecap] = useState(null);
   const [formBonuses, setFormBonuses] = useState([emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()]);
   const [formExtra, setFormExtra] = useState({});
 
@@ -822,6 +824,12 @@ function MahjongApp() {
   useEffect(() => { if (loaded) (async () => { try { await window.storage.set(STATS_KEY, JSON.stringify(stats), false); } catch (e) {} })(); }, [stats, loaded]);
   useEffect(() => { if (loaded) (async () => { try { await window.storage.set(HISTORY_KEY, JSON.stringify(history), false); } catch (e) {} })(); }, [history, loaded]);
   useEffect(() => { if (loaded && profile) (async () => { try { await window.storage.set(PROFILE_KEY, JSON.stringify(profile), false); } catch (e) {} })(); }, [profile, loaded]);
+
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   function showToast(msg) {
     const id = Date.now();
@@ -935,8 +943,10 @@ function MahjongApp() {
     return deltas;
   }
 
-  function openAddRound(prefillValue) {
-    setFormDraw(false); setFormWinner(null); setFormMethod('selfdraw'); setFormDiscarder(null);
+  function openAddRound(prefillValue, presetWinner) {
+    setFormDraw(false);
+    setFormWinner(presetWinner !== undefined ? presetWinner : null);
+    setFormMethod('selfdraw'); setFormDiscarder(null);
     setFormValue(prefillValue !== undefined ? String(prefillValue) : '');
     setFormBonuses([emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()]);
     setFormExtra({});
@@ -1091,6 +1101,7 @@ function MahjongApp() {
       round: game.round + 1, history: [entry, ...game.history],
     });
     setShowAddRound(false);
+    setLastRecap({ entry, players: game.players.map((p) => p.name), unit: cfg.unit, dealerIdx: game.dealerIdx });
   }
 
   function undoLast() {
@@ -2404,7 +2415,10 @@ Balas HANYA JSON, tanpa markdown:
                     {i === game.dealerIdx && (
                       <span className="mj-dealer-crown"><Icon name="crown" size={13} /> 庄{game.streak > 1 ? `×${game.streak}` : ''}</span>
                     )}
-                    <Avatar name={p.name} size={40} wind={seatWindOf(i, game.dealerIdx)} dealer={i === game.dealerIdx} />
+                    <span className="mj-hu-btn" role="button" tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); openAddRound(undefined, i); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openAddRound(undefined, i); } }}>和</span>
+                    <Avatar name={p.name} size={vw >= 1100 ? 72 : vw >= 820 ? 60 : 44} wind={seatWindOf(i, game.dealerIdx)} dealer={i === game.dealerIdx} />
                     <span className="mj-player-name">{p.name}</span>
                     <span className={'mj-player-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')}>
                       {p.score > 0 ? '+' : ''}{p.score}
@@ -2426,7 +2440,10 @@ Balas HANYA JSON, tanpa markdown:
                 <div className="mj-hub-round">局 {game.round}</div>
                 <div className="mj-hub-wind">{WIND_GLYPH[game.roundWind || 0]}圈 · {WIND_NAME[game.roundWind || 0]}</div>
                 <button className="mj-btn primary mj-hub-btn" onClick={() => openAddRound()}>
-                  <Icon name="crown" size={16} /> Tutup Ronde
+                  <span className="mj-hu-glyph">和</span> Hu — Ada Menang
+                </button>
+                <button className="mj-btn ghost sm mj-hub-draw" onClick={() => { openAddRound(); setFormDraw(true); }}>
+                  流局 Seri
                 </button>
               </div>
             </div>
@@ -2507,6 +2524,62 @@ Balas HANYA JSON, tanpa markdown:
             )}
           </div>
         </div>
+
+        {lastRecap && (() => {
+          const e = lastRecap.entry;
+          const names = lastRecap.players;
+          return (
+            <div className="mj-sheet-backdrop" onClick={() => setLastRecap(null)}>
+              <div className="mj-sheet mj-recap-sheet" onClick={(ev) => ev.stopPropagation()}>
+                <div className="mj-sheet-handle" />
+                <div className="mj-recap-top">
+                  <Mascot mood="happy" small line={e.draw ? 'Ronde seri, lanjut lagi!' : `${names[e.winnerIdx]} menang ronde ini`} />
+                </div>
+                <div className="mj-recap-title">Rekapitulasi 局{e.roundNum}</div>
+
+                {!e.draw && (
+                  <div className="mj-concl-box">
+                    <div className="mj-concl-line"><span>Pola dasar</span><span>{e.baseValue}</span></div>
+                    {(e.fanLines || []).map((l, i) => (
+                      <div key={i} className="mj-concl-line"><span>{l.label}</span><span>+{l.value}</span></div>
+                    ))}
+                    <div className="mj-concl-line total"><span>Nilai tangan</span><span>{e.value} {lastRecap.unit}</span></div>
+                    <div className="mj-concl-line"><span>Cara menang</span>
+                      <span>{e.method === 'selfdraw' ? '自摸' : `放炮 ${names[e.discarderIdx]}`}</span></div>
+                  </div>
+                )}
+
+                <div className="mj-concl-box final">
+                  <div className="mj-concl-title">Perolehan Akhir Ronde</div>
+                  {names.map((n, i) => (
+                    <div key={i} className={'mj-final-row' + (!e.draw && e.winnerIdx === i ? ' winner' : '')}>
+                      <Avatar name={n} size={28} wind={seatWindOf(i, lastRecap.dealerIdx)} />
+                      <span className="mj-final-name">{n}</span>
+                      <span className="mj-final-detail">
+                        {e.winDeltas[i] !== 0 && <span>tangan {e.winDeltas[i] > 0 ? '+' : ''}{e.winDeltas[i]}</span>}
+                        {e.sideDeltas[i] !== 0 && <span>bonus {e.sideDeltas[i] > 0 ? '+' : ''}{e.sideDeltas[i]}</span>}
+                      </span>
+                      <span className={'mj-final-amt' + (e.deltas[i] > 0 ? ' positive' : e.deltas[i] < 0 ? ' negative' : '')}>
+                        {e.deltas[i] > 0 ? '+' : ''}{e.deltas[i]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mj-concl-box">
+                  <div className="mj-concl-title">Skor Berjalan</div>
+                  {game.players.map((p, i) => (
+                    <div key={i} className="mj-concl-line"><span>{p.name}</span><span>{p.score}</span></div>
+                  ))}
+                </div>
+
+                <button className="mj-btn primary" onClick={() => setLastRecap(null)}>
+                  <Icon name="check" size={17} /> Lanjut 局{game.round}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {quickPlayer !== null && game.players[quickPlayer] && (
           <div className="mj-sheet-backdrop" onClick={() => setQuickPlayer(null)}>
@@ -3120,6 +3193,48 @@ const CSS = `
 @media (min-width:1180px){
   .mj-felt-inner{min-height:min(66vh,640px);}
   .mj-player-score{font-size:25px;}
+}
+
+.mj-hu-btn{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(180deg,#dcae4c,#b98a2c);color:#2a2109;font-family:'Noto Serif TC',serif;
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 0 #7d5c17;cursor:pointer;transition:transform .06s ease, box-shadow .06s ease;z-index:2;}
+.mj-hu-btn:active{transform:translateY(2px);box-shadow:0 0 0 #7d5c17;}
+.mj-hu-glyph{font-family:'Noto Serif TC',serif;font-size:17px;font-weight:700;}
+.mj-hub-draw{margin-top:7px;width:100%;}
+.mj-recap-sheet .mj-recap-top{display:flex;justify-content:center;margin-bottom:8px;}
+.mj-recap-title{font-family:'Noto Serif TC',serif;font-size:18px;font-weight:700;color:var(--gold);text-align:center;margin-bottom:14px;}
+
+@media (min-width:820px){
+  .mj-hu-btn{width:34px;height:34px;font-size:17px;top:9px;right:9px;}
+  .mj-player-card{padding:18px 12px 15px;gap:7px;}
+  .mj-player-name{font-size:16px;}
+  .mj-player-score{font-size:27px;}
+  .mj-hub-round{font-size:26px;}
+  .mj-hub-btn{padding:16px 12px;font-size:16px;}
+  .mj-felt-inner{min-height:min(68vh,640px);padding:34px 28px;gap:20px;}
+  .mj-mascot-bubble{font-size:13.5px;max-width:300px;padding:11px 15px;}
+  .mj-nav-item{font-size:12px;}
+  .mj-code-badge{font-size:14px;padding:8px 16px;}
+  .mj-icon-btn{width:42px;height:42px;}
+}
+@media (min-width:1180px){
+  .mj-game-layout{max-width:1320px;grid-template-columns:minmax(0,1.7fr) minmax(320px,1fr);gap:26px;}
+  .mj-topbar,.mj-table-foot{max-width:1320px;}
+  .mj-felt-inner{min-height:min(72vh,760px);padding:44px 36px;gap:26px;border-radius:40px;}
+  .mj-player-card{padding:22px 14px 18px;border-radius:20px;}
+  .mj-player-name{font-size:19px;}
+  .mj-player-score{font-size:34px;}
+  .mj-hub-round{font-size:32px;}
+  .mj-hub-wind{font-size:14px;}
+  .mj-hub-btn{padding:19px 14px;font-size:18px;border-radius:15px;}
+  .mj-hu-btn{width:40px;height:40px;font-size:20px;}
+  .mj-dealer-crown{font-size:13px;padding:4px 13px;}
+  .mj-chip{font-size:12px;padding:3px 9px;}
+  .mj-side-card{padding:18px;}
+  .mj-side-title{font-size:15px;}
+  .mj-side-name{font-size:14px;}
+  .mj-side-score{font-size:16px;}
 }
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
