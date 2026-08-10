@@ -271,6 +271,114 @@ const PATTERNS = [
 ];
 
 
+
+/* ============================ IKON ============================ */
+function Icon({ name, size }) {
+  const sz = size || 20;
+  const p = {
+    home: 'M3 11.5 12 4l9 7.5M5.5 10v9.5h13V10',
+    trophy: 'M7 4h10v5a5 5 0 0 1-10 0V4ZM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M9 19h6M12 14v5',
+    scroll: 'M6 4h9a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H8a2 2 0 0 1-2-2V4ZM9 8h5M9 12h5',
+    book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5ZM19 19H6',
+    user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0',
+    gear: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1',
+    plus: 'M12 5v14M5 12h14',
+    refresh: 'M20 12a8 8 0 1 1-2.6-5.9M20 4v4h-4',
+    camera: 'M4 8h3l1.5-2h7L17 8h3v11H4V8ZM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+    flower: 'M12 8.5a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4ZM12 8.5c0-2.4-1-4-2.4-4S7 6.4 8.6 8.2M12 12.9c0 2.4 1 4 2.4 4s2.6-1.9 1-3.7M9.8 10.7c-2.3-.7-4.2-.2-4.6 1.2s1.2 2.9 3.5 2.6M14.2 10.7c2.3.7 4.2.2 4.6-1.2s-1.2-2.9-3.5-2.6',
+    tiles: 'M4 6.5A1.5 1.5 0 0 1 5.5 5h4A1.5 1.5 0 0 1 11 6.5v11A1.5 1.5 0 0 1 9.5 19h-4A1.5 1.5 0 0 1 4 17.5v-11ZM13 6.5A1.5 1.5 0 0 1 14.5 5h4A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-11Z',
+    crown: 'M4 17h16M4 17 3 7l5 4 4-6 4 6 5-4-1 10',
+    undo: 'M4 9h10a5 5 0 0 1 0 10h-4M4 9l4-4M4 9l4 4',
+    close: 'M6 6l12 12M18 6 6 18',
+    check: 'M5 12.5 10 17.5 19 7',
+    back: 'M15 5l-7 7 7 7',
+    dice: 'M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-13ZM8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01',
+  }[name] || '';
+  return (
+    <svg className="mj-icon" width={sz} height={sz} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {p.split('M').filter(Boolean).map((d, i) => <path key={i} d={'M' + d} />)}
+    </svg>
+  );
+}
+
+/* ============================ AVATAR ============================ */
+const AVATAR_COLORS = [
+  ['#c79a3b', '#8a6420'], ['#b23a2e', '#7d2418'], ['#5b8c69', '#33604a'],
+  ['#3f7d9e', '#255670'], ['#8a5fa8', '#5c3a75'], ['#c26a3f', '#8a4322'],
+  ['#4a8f86', '#2b6159'], ['#a84a6b', '#742f47'], ['#6f7f3c', '#4a5726'],
+  ['#7a5c9e', '#4f3a6d'],
+];
+function hashName(n) {
+  let h = 0;
+  for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+  return h;
+}
+function initialsOf(n) {
+  const parts = String(n).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+function Avatar({ name, size, wind, dealer }) {
+  const sz = size || 44;
+  const h = hashName(name || '');
+  const [c1, c2] = AVATAR_COLORS[h % AVATAR_COLORS.length];
+  const gid = 'av' + (h % 100000);
+  return (
+    <div className={'mj-avatar-wrap' + (dealer ? ' dealer' : '')} style={{ width: sz, height: sz }}>
+      <svg width={sz} height={sz} viewBox="0 0 48 48">
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={c1} /><stop offset="100%" stopColor={c2} />
+          </linearGradient>
+        </defs>
+        <circle cx="24" cy="24" r="23" fill={`url(#${gid})`} />
+        <circle cx="24" cy="24" r="23" fill="none" stroke="rgba(243,236,218,0.35)" strokeWidth="1.5" />
+        <text x="24" y="30" textAnchor="middle" fontSize="17" fontWeight="700"
+          fill="#f3ecda" fontFamily="Inter, sans-serif">{initialsOf(name)}</text>
+      </svg>
+      {wind !== undefined && <span className="mj-avatar-wind">{WIND_GLYPH[wind]}</span>}
+    </div>
+  );
+}
+
+/* ============================ MASKOT ============================ */
+function Mascot({ mood, line, small }) {
+  const sz = small ? 46 : 62;
+  const happy = mood === 'happy', think = mood === 'think', sleep = mood === 'sleep';
+  return (
+    <div className={'mj-mascot' + (small ? ' small' : '')}>
+      <svg width={sz} height={sz * 1.25} viewBox="0 0 48 60">
+        <rect x="4" y="4" width="40" height="52" rx="7" fill="#f3ecda" stroke="#d8ccae" strokeWidth="1.5" />
+        <rect x="4" y="50" width="40" height="6" rx="3" fill="#d8ccae" />
+        {sleep ? (
+          <>
+            <path d="M14 24 q4 3 8 0" stroke="#1c1a15" strokeWidth="2" fill="none" strokeLinecap="round" />
+            <path d="M26 24 q4 3 8 0" stroke="#1c1a15" strokeWidth="2" fill="none" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <ellipse cx="18" cy="24" rx="3" ry={think ? 2.2 : 3.4} fill="#1c1a15" />
+            <ellipse cx="30" cy="24" rx="3" ry={think ? 2.2 : 3.4} fill="#1c1a15" />
+            <circle cx="19.1" cy="22.8" r="1.1" fill="#fff" />
+            <circle cx="31.1" cy="22.8" r="1.1" fill="#fff" />
+          </>
+        )}
+        <ellipse cx="12" cy="32" rx="3.4" ry="2.2" fill="#e79a92" opacity="0.55" />
+        <ellipse cx="36" cy="32" rx="3.4" ry="2.2" fill="#e79a92" opacity="0.55" />
+        {happy
+          ? <path d="M19 32 q5 5 10 0" stroke="#b23a2e" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+          : think
+            ? <path d="M20 33.5 h8" stroke="#b23a2e" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+            : <path d="M20 32.5 q4 3 8 0" stroke="#b23a2e" strokeWidth="2.2" fill="none" strokeLinecap="round" />}
+        <text x="24" y="47" textAnchor="middle" fontSize="9" fill="#5b8c69" fontFamily="serif" fontWeight="700">發</text>
+      </svg>
+      {line && <div className="mj-mascot-bubble">{line}</div>}
+    </div>
+  );
+}
+
 /* ============================ MESIN PERHITUNGAN RONDE ============================ */
 const WIND_GLYPH = ['東', '南', '西', '北'];
 const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
@@ -303,7 +411,7 @@ function settleRound(cfgGame, input) {
   const sideLines = [];
 
   // --- 1. Pembayaran langsung (berlaku juga saat seri, karena terjadi di tengah ronde) ---
-  if (mode === 'side') {
+  if (mode === 'side' && input.includeSide) {
     for (let i = 0; i < 4; i++) {
       const b = bonuses[i] || emptyBonus();
       // kong tertutup dihargai dua kali kong terbuka
@@ -494,7 +602,7 @@ function buildDemoData() {
     players: livePlayers.map((n, i) => ({ name: n, score: liveScores[i] })),
     startingScore: cfg.startingScore, dealerIdx: dIdx, streak: strk,
     round: scripted.length + 1, dealerDoubles: true, dealerKeepsSeat: true,
-    bonusMode: 'fan', flowerUnit: 1, kongUnit: 1, roundWind: 0, dealerPasses: 3,
+    bonusMode: 'side', flowerUnit: 2, kongUnit: 3, roundWind: 0, dealerPasses: 3, roundEvents: [],
     history: liveRounds,
   };
 
@@ -627,8 +735,8 @@ function MahjongApp() {
   const [dealerDoubles, setDealerDoubles] = useState(true);
   const [dealerKeepsSeat, setDealerKeepsSeat] = useState(true);
   const [bonusMode, setBonusMode] = useState('fan');
-  const [flowerUnit, setFlowerUnit] = useState(1);
-  const [kongUnit, setKongUnit] = useState(1);
+  const [flowerUnit, setFlowerUnit] = useState(2);
+  const [kongUnit, setKongUnit] = useState(3);
 
   const [activeSlot, setActiveSlot] = useState(0);
   const [demoOn, setDemoOn] = useState(false);
@@ -647,6 +755,7 @@ function MahjongApp() {
   const [formDiscarder, setFormDiscarder] = useState(null);
   const [formValue, setFormValue] = useState('');
   const [roundStep, setRoundStep] = useState(1);
+  const [quickPlayer, setQuickPlayer] = useState(null);
   const [formBonuses, setFormBonuses] = useState([emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()]);
   const [formExtra, setFormExtra] = useState({});
 
@@ -697,7 +806,7 @@ function MahjongApp() {
       if (p) { try { setProfile(JSON.parse(p)); } catch (e) {} }
       if (s) { try { setStats(JSON.parse(s)); } catch (e) {} }
       if (h) { try { const hh = JSON.parse(h); setHistory(hh); setDemoOn(hh.some((x) => x.demo)); } catch (e) {} }
-      if (a) { try { const g = JSON.parse(a); setGame(g); setGuideMode(g.mode); setScanMode(g.mode); setView('playing'); } catch (e) { setView('home'); } }
+      if (a) { try { const g = JSON.parse(a); if (!g.roundEvents) g.roundEvents = []; setGame(g); setGuideMode(g.mode); setScanMode(g.mode); setView('playing'); } catch (e) { setView('home'); } }
       else setView('home');
       setLoaded(true);
     })();
@@ -782,8 +891,8 @@ function MahjongApp() {
       players: names.map((n) => ({ name: n, score: Number(startingScore) || 0 })),
       startingScore: Number(startingScore) || 0,
       dealerIdx: 0, streak: 1, round: 1, dealerDoubles, dealerKeepsSeat,
-      bonusMode, flowerUnit: Number(flowerUnit) || 0, kongUnit: Number(kongUnit) || 0,
-      roundWind: 0, dealerPasses: 0, history: [],
+      bonusMode: 'side', flowerUnit: Number(flowerUnit) || 0, kongUnit: Number(kongUnit) || 0,
+      roundWind: 0, dealerPasses: 0, roundEvents: [], history: [],
     });
     setGuideMode(mode); setScanMode(mode);
     setView('playing');
@@ -832,6 +941,49 @@ function MahjongApp() {
     setShowAddRound(true);
   }
 
+  function addBonusEvent(playerIdx, type) {
+    if (!game) return;
+    const fUnit = Number(game.flowerUnit) || 0;
+    const kUnit = Number(game.kongUnit) || 0;
+    const units = type === 'flower' ? fUnit : type === 'kongAn' ? kUnit * 2 : kUnit;
+    if (units <= 0) { showToast('Nilai bunga/kong diatur 0 di game ini'); return; }
+    const deltas = [0, 0, 0, 0];
+    for (let p = 0; p < 4; p++) {
+      if (p === playerIdx) continue;
+      deltas[p] -= units; deltas[playerIdx] += units;
+    }
+    const ev = { id: Date.now() + Math.random(), playerIdx, type, units, deltas };
+    setGame({
+      ...game,
+      players: game.players.map((p, i) => ({ ...p, score: p.score + deltas[i] })),
+      roundEvents: [...(game.roundEvents || []), ev],
+    });
+    const label = type === 'flower' ? '花 Bunga' : type === 'kongAn' ? '暗槓' : '明槓';
+    showToast(`${label} ${game.players[playerIdx].name} · +${units * 3}`);
+  }
+
+  function undoBonusEvent(id) {
+    if (!game) return;
+    const evs = game.roundEvents || [];
+    const ev = evs.find((e) => e.id === id);
+    if (!ev) return;
+    setGame({
+      ...game,
+      players: game.players.map((p, i) => ({ ...p, score: p.score - ev.deltas[i] })),
+      roundEvents: evs.filter((e) => e.id !== id),
+    });
+  }
+
+  function roundTally(playerIdx) {
+    const evs = (game && game.roundEvents) || [];
+    const t = { flower: 0, kongAn: 0, kongMing: 0, net: 0 };
+    evs.forEach((e) => {
+      if (e.playerIdx === playerIdx) t[e.type] += 1;
+      t.net += e.deltas[playerIdx];
+    });
+    return t;
+  }
+
   function setBonus(idx, key, val) {
     const next = formBonuses.map((b, i) => (i === idx ? { ...b, [key]: Math.max(0, val) } : b));
     setFormBonuses(next);
@@ -847,6 +999,7 @@ function MahjongApp() {
       handValue: Number(formValue) || 0,
       bonuses: formBonuses,
       winnerExtra: formExtra,
+      includeSide: false,
     });
   }
 
@@ -861,6 +1014,9 @@ function MahjongApp() {
     if (!st) return;
 
     const newPlayers = game.players.map((p, i) => ({ ...p, score: p.score + st.deltas[i] }));
+    const liveEvents = game.roundEvents || [];
+    const liveDeltas = [0, 0, 0, 0];
+    liveEvents.forEach((e) => e.deltas.forEach((d, i) => { liveDeltas[i] += d; }));
 
     let newDealerIdx = game.dealerIdx, newStreak = game.streak;
     let newRoundWind = game.roundWind || 0, newPasses = game.dealerPasses || 0;
@@ -887,12 +1043,14 @@ function MahjongApp() {
       extra: { ...formExtra },
       fanLines: st.fanLines, sideLines: st.sideLines, winLines: st.winLines,
       cappedAt: st.cappedAt, bonusMode: st.mode,
-      deltas: st.deltas, winDeltas: st.winDeltas, sideDeltas: st.sideDeltas,
+      events: liveEvents,
+      deltas: st.deltas.map((d, i) => d + liveDeltas[i]),
+      winDeltas: st.winDeltas, sideDeltas: liveDeltas,
     };
 
     setGame({
       ...game, players: newPlayers, dealerIdx: newDealerIdx, streak: newStreak,
-      roundWind: newRoundWind, dealerPasses: newPasses,
+      roundWind: newRoundWind, dealerPasses: newPasses, roundEvents: [],
       round: game.round + 1, history: [entry, ...game.history],
     });
     setShowAddRound(false);
@@ -1177,15 +1335,15 @@ Balas HANYA JSON, tanpa markdown:
     return (
       <div className="mj-nav">
         <button className={'mj-nav-item' + (active === 'leaderboard' ? ' active' : '')} onClick={() => setView('leaderboard')}>
-          <span className="mj-nav-icon">榜</span>Papan</button>
+          <Icon name="trophy" size={21} />Papan</button>
         <button className={'mj-nav-item' + (active === 'history' ? ' active' : '')} onClick={() => setView('history')}>
-          <span className="mj-nav-icon">局</span>Riwayat</button>
+          <Icon name="scroll" size={21} />Riwayat</button>
         <button className={'mj-nav-item mj-nav-home' + (active === 'home' ? ' active' : '')} onClick={() => setView('home')}>
-          <span className="mj-nav-icon">⌂</span>Home</button>
+          <Icon name="home" size={21} />Home</button>
         <button className={'mj-nav-item' + (active === 'guide' ? ' active' : '')} onClick={() => setView('guide')}>
-          <span className="mj-nav-icon">書</span>Panduan</button>
+          <Icon name="book" size={21} />Panduan</button>
         <button className={'mj-nav-item' + (active === 'profile' ? ' active' : '')} onClick={() => setView('profile')}>
-          <span className="mj-nav-icon">人</span>Profil</button>
+          <Icon name="user" size={21} />Profil</button>
       </div>
     );
   }
@@ -1198,7 +1356,8 @@ Balas HANYA JSON, tanpa markdown:
         <style>{CSS}</style>
         <div className="mj-page">
           <div className="mj-hero">
-            <div className="mj-hero-glyph">麻雀</div>
+            <Mascot mood={game ? 'happy' : 'idle'}
+              line={game ? `Game ${game.code} masih jalan` : 'Siap main? Ayo kocok ubinnya'} />
             <div className="mj-hero-title">Table Score</div>
             <div className="mj-hero-sub">Host, catat, dan pantau skor mahjong meja kamu</div>
           </div>
@@ -1213,11 +1372,17 @@ Balas HANYA JSON, tanpa markdown:
             </div>
           )}
 
-          <button className="mj-primary-btn" onClick={() => setView('host')}>⛩ Host a Game</button>
-          <button className="mj-ghost-btn" onClick={() => setView('join')}>⌗ Join with Code</button>
-          <button className="mj-ghost-btn mj-scan-cta" onClick={() => { resetScan(); setView('scan'); }}>
-            📷 Scan Kartu Tangan
+          <button className="mj-btn primary lg" onClick={() => setView('host')}>
+            <Icon name="dice" size={19} /> Host a Game
           </button>
+          <div className="mj-btn-row">
+            <button className="mj-btn ghost" onClick={() => setView('join')}>
+              <Icon name="plus" size={17} /> Join Kode
+            </button>
+            <button className="mj-btn ghost gold" onClick={() => { resetScan(); setView('scan'); }}>
+              <Icon name="tiles" size={17} /> Hitung Ubin
+            </button>
+          </div>
 
           <div className="mj-card" style={{ marginTop: 14 }}>
             <div className="mj-row-between">
@@ -1341,21 +1506,15 @@ Balas HANYA JSON, tanpa markdown:
           </div>
           <div className="mj-card">
             <div className="mj-label">Aturan Bunga & Kong</div>
-            <div className="mj-segmented">
-              <button className={bonusMode === 'fan' ? 'active' : ''} onClick={() => setBonusMode('fan')}>Tambah {MODES[mode].unit}</button>
-              <button className={bonusMode === 'side' ? 'active' : ''} onClick={() => setBonusMode('side')}>Bayar langsung</button>
-            </div>
             <div className="mj-mode-note" style={{ marginTop: 0 }}>
-              {bonusMode === 'fan'
-                ? `Bunga & kong milik pemenang menambah nilai tangannya. Milik yang kalah tidak berpengaruh.`
-                : `Bunga & kong siapa pun langsung dibayar oleh tiga pemain lain, terlepas siapa yang menang. Kong tertutup dihitung dua kali kong terbuka.`}
+              Bunga & kong dibayar langsung saat kejadian: tiga pemain lain masing-masing membayar ke pemiliknya. Kong tertutup dihitung dua kali kong terbuka.
             </div>
             <div className="mj-row-between">
-              <div className="mj-label" style={{ marginBottom: 0 }}>Nilai per bunga</div>
+              <div className="mj-label" style={{ marginBottom: 0 }}>Poin per bunga (per pembayar)</div>
               <input className="mj-number-input" type="number" value={flowerUnit} onChange={(e) => setFlowerUnit(e.target.value)} />
             </div>
             <div className="mj-row-between">
-              <div className="mj-label" style={{ marginBottom: 0 }}>Nilai per kong terbuka</div>
+              <div className="mj-label" style={{ marginBottom: 0 }}>Poin per kong terbuka</div>
               <input className="mj-number-input" type="number" value={kongUnit} onChange={(e) => setKongUnit(e.target.value)} />
             </div>
           </div>
@@ -1870,7 +2029,7 @@ Balas HANYA JSON, tanpa markdown:
 
               {!apiKeySaved && (
                 <div className="mj-caveat-box">
-                  Hitung poin otomatis butuh API key. Isi dulu di <strong>Profil → API Key</strong>. Fitur lain di app ini jalan tanpa kunci.
+                  Hitung otomatis butuh API key. Isi dulu di <strong>Profil → API Key</strong>. Fitur lain jalan tanpa kunci.
                 </div>
               )}
               <div className="mj-card">
@@ -2128,15 +2287,15 @@ Balas HANYA JSON, tanpa markdown:
             {apiKeySaved ? (
               <>
                 <div className="mj-key-ok">Tersimpan: {apiKeySaved.slice(0, 12)}…{apiKeySaved.slice(-4)}</div>
-                <button className="mj-danger-btn" onClick={() => { setApiKeyStored(''); setApiKeySaved(''); showToast('API key dihapus'); }}>
+                <button className="mj-btn ghost" onClick={() => { setApiKeyStored(''); setApiKeySaved(''); showToast('API key dihapus'); }}>
                   Hapus API Key
                 </button>
               </>
             ) : (
               <>
                 <div className="mj-demo-hint">
-                  Fitur hitung poin otomatis memanggil API Anthropic. Ambil kunci di console.anthropic.com, lalu tempel di sini.
-                  Kunci disimpan hanya di HP ini dan tidak dikirim ke mana pun selain Anthropic.
+                  Fitur hitung poin dari ubin memanggil API Anthropic. Ambil kunci di console.anthropic.com, lalu tempel di sini.
+                  Kunci disimpan hanya di HP ini.
                 </div>
                 <div className="mj-onboard-name">
                   <input className="mj-text-input" type="password" placeholder="sk-ant-…" value={apiKeyInput}
@@ -2185,57 +2344,146 @@ Balas HANYA JSON, tanpa markdown:
       <div className="mj-root">
         <style>{CSS}</style>
         <div className="mj-topbar">
-          <button className="mj-icon-btn" onClick={goHome} title="Home">⌂</button>
+          <button className="mj-icon-btn" onClick={goHome} title="Home"><Icon name="home" size={18} /></button>
           <div className={'mj-code-badge' + (game.demo ? ' demo' : '')}>
-            {game.demo ? 'DEMO' : `Kode ${game.code}${game.isHost ? '' : ' · Join'}`}
+            {game.demo ? 'DEMO' : `${game.code}`}
           </div>
           <div className="mj-topbar-actions">
-            {!game.isHost && <button className="mj-icon-btn" onClick={refreshShared} title="Refresh">⟳</button>}
-            <button className="mj-icon-btn" onClick={() => setShowHistorySheet(true)} title="Riwayat">局</button>
-            <button className="mj-icon-btn" onClick={() => setShowSettings(true)} title="Pengaturan">⚙</button>
+            {!game.isHost && <button className="mj-icon-btn" onClick={refreshShared} title="Refresh"><Icon name="refresh" size={17} /></button>}
+            <button className="mj-icon-btn" onClick={() => setShowHistorySheet(true)} title="Riwayat"><Icon name="scroll" size={17} /></button>
+            <button className="mj-icon-btn" onClick={() => setShowSettings(true)} title="Pengaturan"><Icon name="gear" size={17} /></button>
           </div>
         </div>
 
-        <div className="mj-table-wrap">
-          {game.players.map((p, i) => (
-            <div key={i} className={'mj-seat ' + SEAT_CLASS[i]}>
-              <div className={'mj-tile' + (i === game.dealerIdx ? ' is-dealer' : '')}>
-                {i === game.dealerIdx && <div className="mj-dealer-badge">庄{game.streak > 1 ? ` ×${game.streak}` : ''}</div>}
-                <div className="mj-tile-name">
-                  <span className="mj-seat-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>{p.name}
+        <div className="mj-felt">
+          <div className="mj-felt-inner">
+            {game.players.map((p, i) => {
+              const t = roundTally(i);
+              return (
+                <div key={i} className={'mj-seat ' + SEAT_CLASS[i]}>
+                  <button className={'mj-player-card' + (i === game.dealerIdx ? ' is-dealer' : '')}
+                    onClick={() => setQuickPlayer(i)}>
+                    {i === game.dealerIdx && (
+                      <span className="mj-dealer-crown"><Icon name="crown" size={13} /> 庄{game.streak > 1 ? `×${game.streak}` : ''}</span>
+                    )}
+                    <Avatar name={p.name} size={40} wind={seatWindOf(i, game.dealerIdx)} dealer={i === game.dealerIdx} />
+                    <span className="mj-player-name">{p.name}</span>
+                    <span className={'mj-player-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')}>
+                      {p.score > 0 ? '+' : ''}{p.score}
+                    </span>
+                    {(t.flower > 0 || t.kongAn > 0 || t.kongMing > 0) && (
+                      <span className="mj-player-chips">
+                        {t.flower > 0 && <span className="mj-chip flower">花{t.flower}</span>}
+                        {t.kongAn > 0 && <span className="mj-chip kong">暗{t.kongAn}</span>}
+                        {t.kongMing > 0 && <span className="mj-chip kong">明{t.kongMing}</span>}
+                      </span>
+                    )}
+                  </button>
                 </div>
-                <div className={'mj-tile-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')}>{p.score > 0 ? '+' : ''}{p.score}</div>
+              );
+            })}
+
+            <div className="mj-seat seat-center">
+              <div className="mj-hub">
+                <div className="mj-hub-round">局 {game.round}</div>
+                <div className="mj-hub-wind">{WIND_GLYPH[game.roundWind || 0]}圈 · {WIND_NAME[game.roundWind || 0]}</div>
+                <button className="mj-btn primary mj-hub-btn" onClick={() => openAddRound()}>
+                  <Icon name="crown" size={16} /> Tutup Ronde
+                </button>
               </div>
-            </div>
-          ))}
-          <div className="mj-seat seat-center">
-            <div className="mj-center-info">
-              <div className="mj-round-no">局 {game.round}</div>
-              <div className="mj-wind-line">{WIND_GLYPH[game.roundWind || 0]}風圈 · putaran {WIND_NAME[game.roundWind || 0]}</div>
-              <div className="mj-dealer-line">庄家 {game.players[game.dealerIdx].name}</div>
-              <button className="mj-primary-btn mj-add-round-btn" onClick={() => openAddRound()}>+ Ronde</button>
-              {game.history.length > 0 && <button className="mj-link-btn mj-undo-btn" onClick={undoLast}>Undo ronde terakhir</button>}
             </div>
           </div>
         </div>
+
+        <div className="mj-table-foot">
+          <Mascot small mood={(game.roundEvents || []).length > 0 ? 'happy' : 'idle'}
+            line={(game.roundEvents || []).length > 0
+              ? `${(game.roundEvents || []).length} bonus tercatat ronde ini`
+              : 'Tap pemain untuk catat bunga atau kong'} />
+          <div className="mj-foot-actions">
+            {(game.roundEvents || []).length > 0 && (
+              <button className="mj-btn ghost sm" onClick={() => undoBonusEvent(game.roundEvents[game.roundEvents.length - 1].id)}>
+                <Icon name="undo" size={15} /> Batal bonus
+              </button>
+            )}
+            {game.history.length > 0 && (
+              <button className="mj-btn ghost sm" onClick={undoLast}>
+                <Icon name="undo" size={15} /> Batal ronde
+              </button>
+            )}
+          </div>
+        </div>
+
+        {quickPlayer !== null && game.players[quickPlayer] && (
+          <div className="mj-sheet-backdrop" onClick={() => setQuickPlayer(null)}>
+            <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mj-sheet-handle" />
+              <div className="mj-quick-head">
+                <Avatar name={game.players[quickPlayer].name} size={52} wind={seatWindOf(quickPlayer, game.dealerIdx)} dealer={quickPlayer === game.dealerIdx} />
+                <div>
+                  <div className="mj-quick-name">{game.players[quickPlayer].name}</div>
+                  <div className="mj-quick-sub">
+                    {WIND_GLYPH[seatWindOf(quickPlayer, game.dealerIdx)]} {WIND_NAME[seatWindOf(quickPlayer, game.dealerIdx)]}
+                    {quickPlayer === game.dealerIdx ? ' · Banker' : ''} · Skor {game.players[quickPlayer].score}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mj-label">Catat Bonus (dibayar langsung)</div>
+              <div className="mj-quick-grid">
+                <button className="mj-quick-btn flower" onClick={() => addBonusEvent(quickPlayer, 'flower')}>
+                  <Icon name="flower" size={26} />
+                  <span className="mj-quick-label">花 Bunga</span>
+                  <span className="mj-quick-val">+{(Number(game.flowerUnit) || 0) * 3}</span>
+                </button>
+                <button className="mj-quick-btn kong" onClick={() => addBonusEvent(quickPlayer, 'kongAn')}>
+                  <Icon name="tiles" size={26} />
+                  <span className="mj-quick-label">暗槓 Tertutup</span>
+                  <span className="mj-quick-val">+{(Number(game.kongUnit) || 0) * 6}</span>
+                </button>
+                <button className="mj-quick-btn kong" onClick={() => addBonusEvent(quickPlayer, 'kongMing')}>
+                  <Icon name="tiles" size={26} />
+                  <span className="mj-quick-label">明槓 Terbuka</span>
+                  <span className="mj-quick-val">+{(Number(game.kongUnit) || 0) * 3}</span>
+                </button>
+              </div>
+
+              {(() => {
+                const mine = (game.roundEvents || []).filter((e) => e.playerIdx === quickPlayer);
+                return mine.length > 0 ? (
+                  <>
+                    <div className="mj-label" style={{ marginTop: 14 }}>Ronde ini</div>
+                    {mine.map((e) => (
+                      <div key={e.id} className="mj-event-row">
+                        <span>{e.type === 'flower' ? '花 Bunga' : e.type === 'kongAn' ? '暗槓 Kong tertutup' : '明槓 Kong terbuka'}</span>
+                        <span className="mj-event-val">+{e.units * 3}</span>
+                        <button className="mj-event-undo" onClick={() => undoBonusEvent(e.id)}><Icon name="close" size={14} /></button>
+                      </div>
+                    ))}
+                  </>
+                ) : null;
+              })()}
+
+              <button className="mj-btn ghost" style={{ marginTop: 14 }} onClick={() => setQuickPlayer(null)}>Tutup</button>
+            </div>
+          </div>
+        )}
 
         {showAddRound && (() => {
           const st = currentSettlement();
           const canProceed = formDraw || (formWinner !== null && Number(formValue) > 0 && (formMethod === 'selfdraw' || formDiscarder !== null));
-          const sideOn = (game.bonusMode || 'fan') === 'side';
           return (
           <div className="mj-sheet-backdrop" onClick={() => setShowAddRound(false)}>
             <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="mj-sheet-handle" />
               <div className="mj-row-between">
-                <div className="mj-sheet-title" style={{ marginBottom: 0 }}>Ronde {game.round}</div>
-                <div className="mj-step-pill">Langkah {roundStep}/3</div>
+                <div className="mj-sheet-title" style={{ marginBottom: 0 }}>Tutup Ronde {game.round}</div>
+                <div className="mj-step-pill">{roundStep}/2</div>
               </div>
               <div className="mj-step-bar">
-                <span className={roundStep >= 1 ? 'on' : ''} /><span className={roundStep >= 2 ? 'on' : ''} /><span className={roundStep >= 3 ? 'on' : ''} />
+                <span className={roundStep >= 1 ? 'on' : ''} /><span className={roundStep >= 2 ? 'on' : ''} />
               </div>
 
-              {/* ---------- LANGKAH 1: HASIL & NILAI TANGAN ---------- */}
               {roundStep === 1 && (
                 <>
                   <div className="mj-segmented">
@@ -2245,11 +2493,12 @@ Balas HANYA JSON, tanpa markdown:
                   {!formDraw && (
                     <>
                       <div className="mj-label">Pemenang</div>
-                      <div className="mj-choice-row">
+                      <div className="mj-winner-row">
                         {game.players.map((p, i) => (
-                          <button key={i} className={'mj-choice-btn' + (formWinner === i ? ' active' : '')}
+                          <button key={i} className={'mj-winner-pick' + (formWinner === i ? ' active' : '')}
                             onClick={() => { setFormWinner(i); setFormDiscarder(null); }}>
-                            {p.name} <span className="mj-choice-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>
+                            <Avatar name={p.name} size={38} wind={seatWindOf(i, game.dealerIdx)} />
+                            <span>{p.name}</span>
                           </button>
                         ))}
                       </div>
@@ -2264,16 +2513,16 @@ Balas HANYA JSON, tanpa markdown:
                           <div className="mj-choice-row">
                             {[0, 1, 2, 3].filter((i) => i !== formWinner).map((i) => (
                               <button key={i} className={'mj-choice-btn' + (formDiscarder === i ? ' active' : '')}
-                                onClick={() => setFormDiscarder(i)} disabled={formWinner === null}>{game.players[i].name}</button>
+                                onClick={() => setFormDiscarder(i)}>{game.players[i].name}</button>
                             ))}
                           </div>
                         </>
                       )}
                       <div className="mj-row-between">
                         <div className="mj-label" style={{ marginBottom: 0 }}>Nilai pola tangan ({cfg.unit})</div>
-                        <button className="mj-link-btn" style={{ padding: 0 }}
+                        <button className="mj-link-btn mj-inline-icon" style={{ padding: 0 }}
                           onClick={() => { setShowAddRound(false); resetScan(); setScanMode(game.mode === 'custom' ? 'hongkong' : game.mode); setView('scan'); }}>
-                          📷 Scan
+                          <Icon name="tiles" size={15} /> Hitung dari ubin
                         </button>
                       </div>
                       <div className="mj-preset-row" style={{ marginTop: 8 }}>
@@ -2281,99 +2530,47 @@ Balas HANYA JSON, tanpa markdown:
                           <button key={v} className={'mj-preset-chip' + (Number(formValue) === v ? ' active' : '')} onClick={() => setFormValue(String(v))}>{v}</button>
                         ))}
                       </div>
-                      <input className="mj-number-input mj-value-input" type="number" placeholder={`Nilai pola dasar`} value={formValue} onChange={(e) => setFormValue(e.target.value)} />
-                      <div className="mj-hint-text" style={{ textAlign: 'left', marginTop: 0 }}>
-                        Isi nilai polanya saja. Bunga, kong, angin, dan bonus lain ditambahkan di langkah berikutnya.
-                      </div>
+                      <input className="mj-number-input mj-value-input" type="number" placeholder="Nilai pola" value={formValue} onChange={(e) => setFormValue(e.target.value)} />
+
+                      <details className="mj-extra-fold">
+                        <summary>Bonus tangan lain (opsional)</summary>
+                        {[
+                          { key: 'seatWind', label: `門風 Angin duduk ${WIND_GLYPH[seatWindOf(formWinner || 0, game.dealerIdx)]}` },
+                          { key: 'roundWind', label: `圈風 Angin putaran ${WIND_GLYPH[game.roundWind || 0]}` },
+                          { key: 'concealed', label: '門前清 Tangan tertutup' },
+                          { key: 'selfDrawBonus', label: '自摸 Bonus self-draw', disabled: formMethod !== 'selfdraw' },
+                          { key: 'lastTile', label: '海底撈月 Ubin terakhir' },
+                          { key: 'kongBloom', label: '槓上開花 Dari ubin kong' },
+                          { key: 'robKong', label: '搶槓 Merampok kong' },
+                        ].map((row) => (
+                          <label key={row.key} className={'mj-toggle-row mj-extra-row' + (row.disabled ? ' disabled' : '')}>
+                            <span>{row.label}</span>
+                            <input type="checkbox" disabled={row.disabled} checked={!!formExtra[row.key]}
+                              onChange={(e) => setFormExtra({ ...formExtra, [row.key]: e.target.checked })} />
+                          </label>
+                        ))}
+                        <div className="mj-hint-text" style={{ textAlign: 'left' }}>Masing-masing +1 {cfg.unit}.</div>
+                      </details>
                     </>
                   )}
                   {formDraw && (
                     <div className="mj-draw-note">
-                      Tidak ada pemenang. Bunga dan kong tetap dicatat di langkah berikutnya
-                      {sideOn ? ' karena pembayarannya terjadi selama ronde berjalan.' : ', walau dalam mode ini tidak menghasilkan poin saat seri.'}
+                      Tidak ada yang menang. Bunga dan kong yang sudah dicatat selama ronde tetap berlaku — pembayarannya sudah terjadi.
                     </div>
                   )}
                   <div className="mj-sheet-actions">
-                    <button className="mj-ghost-btn" onClick={() => setShowAddRound(false)}>Batal</button>
-                    <button className="mj-primary-btn" disabled={!canProceed} onClick={() => setRoundStep(2)}>Lanjut</button>
+                    <button className="mj-btn ghost" onClick={() => setShowAddRound(false)}>Batal</button>
+                    <button className="mj-btn primary" disabled={!canProceed} onClick={() => setRoundStep(2)}>Lanjut</button>
                   </div>
                 </>
               )}
 
-              {/* ---------- LANGKAH 2: BUNGA, KONG, BONUS ---------- */}
-              {roundStep === 2 && (
-                <>
-                  <div className="mj-mode-note">
-                    {sideOn
-                      ? 'Mode bayar langsung: bunga & kong SEMUA pemain dibayar oleh tiga lainnya, siapa pun yang menang.'
-                      : 'Mode tambah fan: bunga & kong hanya dihitung untuk pemenang. Catat semua tetap boleh, sebagai rekaman.'}
-                  </div>
-
-                  {game.players.map((p, i) => {
-                    const b = formBonuses[i];
-                    const isWinner = !formDraw && formWinner === i;
-                    const counts = !sideOn && !isWinner;
-                    return (
-                      <div key={i} className={'mj-bonus-card' + (isWinner ? ' winner' : '') + (counts ? ' muted' : '')}>
-                        <div className="mj-bonus-head">
-                          <span className="mj-bonus-name">
-                            <span className="mj-bonus-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>
-                            {p.name}
-                            {i === game.dealerIdx && <span className="mj-bonus-tag">庄</span>}
-                            {isWinner && <span className="mj-bonus-tag win">menang</span>}
-                          </span>
-                        </div>
-                        {[
-                          { key: 'flowers', label: '花 Bunga' },
-                          { key: 'kongAn', label: '暗槓 Kong tertutup' },
-                          { key: 'kongMing', label: '明槓 Kong terbuka' },
-                        ].map((row) => (
-                          <div key={row.key} className="mj-stepper-row">
-                            <span className="mj-stepper-label">{row.label}</span>
-                            <div className="mj-stepper">
-                              <button onClick={() => setBonus(i, row.key, b[row.key] - 1)}>−</button>
-                              <span className="mj-stepper-val">{b[row.key]}</span>
-                              <button onClick={() => setBonus(i, row.key, b[row.key] + 1)}>+</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-
-                  {!formDraw && formWinner !== null && (
-                    <div className="mj-bonus-card winner">
-                      <div className="mj-bonus-head">
-                        <span className="mj-bonus-name">Bonus tangan {game.players[formWinner].name}</span>
-                      </div>
-                      {[
-                        { key: 'seatWind', label: `門風 Triplet angin duduk (${WIND_GLYPH[seatWindOf(formWinner, game.dealerIdx)]})` },
-                        { key: 'roundWind', label: `圈風 Triplet angin putaran (${WIND_GLYPH[game.roundWind || 0]})` },
-                        { key: 'concealed', label: '門前清 Tangan tertutup' },
-                        { key: 'selfDrawBonus', label: '自摸 Bonus self-draw', disabled: formMethod !== 'selfdraw' },
-                        { key: 'lastTile', label: '海底撈月 Menang di ubin terakhir' },
-                        { key: 'kongBloom', label: '槓上開花 Menang dari ubin pengganti kong' },
-                        { key: 'robKong', label: '搶槓 Merampok kong' },
-                      ].map((row) => (
-                        <label key={row.key} className={'mj-toggle-row mj-extra-row' + (row.disabled ? ' disabled' : '')}>
-                          <span>{row.label}</span>
-                          <input type="checkbox" disabled={row.disabled} checked={!!formExtra[row.key]}
-                            onChange={(e) => setFormExtra({ ...formExtra, [row.key]: e.target.checked })} />
-                        </label>
-                      ))}
-                      <div className="mj-hint-text" style={{ textAlign: 'left' }}>Masing-masing menambah 1 {cfg.unit}.</div>
-                    </div>
-                  )}
-
-                  <div className="mj-sheet-actions">
-                    <button className="mj-ghost-btn" onClick={() => setRoundStep(1)}>Kembali</button>
-                    <button className="mj-primary-btn" onClick={() => setRoundStep(3)}>Lihat Konklusi</button>
-                  </div>
-                </>
-              )}
-
-              {/* ---------- LANGKAH 3: KONKLUSI ---------- */}
-              {roundStep === 3 && st && (
+              {roundStep === 2 && st && (() => {
+                const live = game.roundEvents || [];
+                const liveDeltas = [0, 0, 0, 0];
+                live.forEach((e) => e.deltas.forEach((d, i) => { liveDeltas[i] += d; }));
+                const finalDeltas = st.deltas.map((d, i) => d + liveDeltas[i]);
+                return (
                 <>
                   {!formDraw && (
                     <div className="mj-concl-box">
@@ -2383,19 +2580,23 @@ Balas HANYA JSON, tanpa markdown:
                         <div key={i} className="mj-concl-line"><span>{l.label}</span><span>+{l.value}</span></div>
                       ))}
                       <div className="mj-concl-line total"><span>Total</span><span>{st.total} {cfg.unit}</span></div>
-                      {st.cappedAt && <div className="mj-concl-cap">Dibatasi maksimum {st.cappedAt} {cfg.unit} sesuai aturan {cfg.short}.</div>}
+                      {st.cappedAt && <div className="mj-concl-cap">Dibatasi maksimum {st.cappedAt} {cfg.unit}.</div>}
                     </div>
                   )}
 
-                  {st.sideLines.length > 0 && (
+                  {live.length > 0 && (
                     <div className="mj-concl-box">
-                      <div className="mj-concl-title">Bayar langsung (bunga & kong)</div>
-                      {st.sideLines.map((l, i) => (
-                        <div key={i} className="mj-concl-line">
-                          <span>{game.players[l.idx].name} · {l.flowers}花 {l.kongAn}暗 {l.kongMing}明</span>
-                          <span>{l.units} × 3</span>
-                        </div>
-                      ))}
+                      <div className="mj-concl-title">Bunga & kong ronde ini (sudah dibayar)</div>
+                      {game.players.map((p, i) => {
+                        const t = roundTally(i);
+                        if (!t.flower && !t.kongAn && !t.kongMing) return null;
+                        return (
+                          <div key={i} className="mj-concl-line">
+                            <span>{p.name} · {t.flower}花 {t.kongAn}暗 {t.kongMing}明</span>
+                            <span>{liveDeltas[i] > 0 ? '+' : ''}{liveDeltas[i]}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -2405,7 +2606,7 @@ Balas HANYA JSON, tanpa markdown:
                       {st.winLines.map((l, i) => (
                         <div key={i} className="mj-concl-line">
                           <span>{game.players[l.from].name} → {game.players[formWinner].name}</span>
-                          <span>{l.amount}{l.doubled ? ' (庄 ×2)' : ''}</span>
+                          <span>{l.amount}{l.doubled ? ' 庄×2' : ''}</span>
                         </div>
                       ))}
                     </div>
@@ -2415,26 +2616,28 @@ Balas HANYA JSON, tanpa markdown:
                     <div className="mj-concl-title">Perolehan Ronde Ini</div>
                     {game.players.map((p, i) => (
                       <div key={i} className={'mj-final-row' + (!formDraw && formWinner === i ? ' winner' : '')}>
-                        <span className="mj-final-name">
-                          <span className="mj-bonus-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>{p.name}
-                        </span>
+                        <Avatar name={p.name} size={26} />
+                        <span className="mj-final-name">{p.name}</span>
                         <span className="mj-final-detail">
-                          {st.winDeltas[i] !== 0 && <span>tangan {st.winDeltas[i] > 0 ? '+' : ''}{st.winDeltas[i]}</span>}
-                          {st.sideDeltas[i] !== 0 && <span>bonus {st.sideDeltas[i] > 0 ? '+' : ''}{st.sideDeltas[i]}</span>}
+                          {st.deltas[i] !== 0 && <span>tangan {st.deltas[i] > 0 ? '+' : ''}{st.deltas[i]}</span>}
+                          {liveDeltas[i] !== 0 && <span>bonus {liveDeltas[i] > 0 ? '+' : ''}{liveDeltas[i]}</span>}
                         </span>
-                        <span className={'mj-final-amt' + (st.deltas[i] > 0 ? ' positive' : st.deltas[i] < 0 ? ' negative' : '')}>
-                          {st.deltas[i] > 0 ? '+' : ''}{st.deltas[i]}
+                        <span className={'mj-final-amt' + (finalDeltas[i] > 0 ? ' positive' : finalDeltas[i] < 0 ? ' negative' : '')}>
+                          {finalDeltas[i] > 0 ? '+' : ''}{finalDeltas[i]}
                         </span>
                       </div>
                     ))}
                   </div>
 
                   <div className="mj-sheet-actions">
-                    <button className="mj-ghost-btn" onClick={() => setRoundStep(2)}>Kembali</button>
-                    <button className="mj-primary-btn" onClick={confirmRound}>Simpan Ronde</button>
+                    <button className="mj-btn ghost" onClick={() => setRoundStep(1)}>Kembali</button>
+                    <button className="mj-btn primary" onClick={confirmRound}>
+                      <Icon name="check" size={17} /> Simpan Ronde
+                    </button>
                   </div>
                 </>
-              )}
+                );
+              })()}
             </div>
           </div>
           );
@@ -2645,6 +2848,93 @@ const CSS = `
 .mj-history-sub{font-size:11px;opacity:0.6;margin-top:3px;line-height:1.4;}
 .mj-history-deltas{display:flex;flex-wrap:wrap;gap:7px;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;}
 .mj-history-deltas .positive{color:var(--bamboo);} .mj-history-deltas .negative{color:#ff8a7a;} .mj-history-deltas .zero{opacity:0.4;}
+
+/* ---- tombol taktil ---- */
+.mj-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:none;border-radius:14px;
+  padding:14px 16px;font-size:14.5px;font-weight:700;font-family:'Inter',sans-serif;cursor:pointer;
+  transition:transform .06s ease, box-shadow .06s ease;margin-bottom:10px;letter-spacing:0.01em;}
+.mj-btn.primary{background:linear-gradient(180deg,#c8493b,#a5321f);color:#fff8ef;box-shadow:0 5px 0 #6f2015, 0 7px 14px rgba(0,0,0,0.35);}
+.mj-btn.primary:active{transform:translateY(4px);box-shadow:0 1px 0 #6f2015, 0 2px 6px rgba(0,0,0,0.35);}
+.mj-btn.gold,.mj-btn.ghost.gold{background:linear-gradient(180deg,#dcae4c,#b98a2c);color:#2a2109;box-shadow:0 5px 0 #7d5c17,0 7px 14px rgba(0,0,0,0.3);border:none;}
+.mj-btn.ghost{background:rgba(243,236,218,0.09);color:var(--tile-ivory);border:1px solid rgba(243,236,218,0.25);box-shadow:0 4px 0 rgba(0,0,0,0.28);}
+.mj-btn.ghost:active,.mj-btn.gold:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,0.28);}
+.mj-btn.lg{padding:17px;font-size:16px;}
+.mj-btn.sm{padding:9px 12px;font-size:12.5px;border-radius:11px;margin-bottom:0;width:auto;}
+.mj-btn:disabled{opacity:0.45;box-shadow:none;transform:none;}
+.mj-btn-row{display:flex;gap:10px;margin-bottom:14px;}
+.mj-btn-row .mj-btn{margin-bottom:0;}
+.mj-icon{flex-shrink:0;}
+.mj-inline-icon{display:inline-flex;align-items:center;gap:4px;}
+
+/* ---- avatar ---- */
+.mj-avatar-wrap{position:relative;flex-shrink:0;line-height:0;}
+.mj-avatar-wrap.dealer svg circle:last-of-type{stroke:var(--gold);stroke-width:2.5;}
+.mj-avatar-wind{position:absolute;bottom:-2px;right:-3px;background:var(--felt-shadow);border:1px solid var(--gold);
+  color:var(--gold);font-family:'Noto Serif TC',serif;font-size:9.5px;font-weight:700;
+  width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+
+/* ---- maskot ---- */
+.mj-mascot{display:flex;align-items:center;gap:10px;justify-content:center;}
+.mj-mascot.small{gap:8px;}
+.mj-mascot-bubble{background:rgba(243,236,218,0.1);border:1px solid rgba(243,236,218,0.2);border-radius:12px;
+  padding:8px 12px;font-size:12px;line-height:1.4;opacity:0.9;max-width:210px;position:relative;}
+.mj-mascot-bubble:before{content:'';position:absolute;left:-5px;top:50%;margin-top:-4px;width:8px;height:8px;
+  background:rgba(243,236,218,0.1);border-left:1px solid rgba(243,236,218,0.2);border-bottom:1px solid rgba(243,236,218,0.2);transform:rotate(45deg);}
+
+/* ---- meja ---- */
+.mj-felt{max-width:460px;margin:0 auto;padding:0 12px;}
+.mj-felt-inner{position:relative;background:radial-gradient(ellipse at 50% 45%, #17624f, #0d3d31 70%);
+  border:3px solid #6b4a2a;border-radius:26px;padding:14px 10px;
+  box-shadow:inset 0 0 40px rgba(0,0,0,0.45), 0 10px 26px rgba(0,0,0,0.4);
+  display:grid;grid-template-columns:1fr 1.15fr 1fr;
+  grid-template-areas:". top ." "left center right" ". bottom .";gap:8px;align-items:center;}
+.seat-top{grid-area:top;} .seat-left{grid-area:left;} .seat-right{grid-area:right;}
+.seat-bottom{grid-area:bottom;} .seat-center{grid-area:center;}
+.mj-player-card{width:100%;background:rgba(243,236,218,0.94);color:var(--ink);border:none;border-radius:13px;
+  padding:9px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;
+  box-shadow:0 4px 0 rgba(0,0,0,0.32);cursor:pointer;transition:transform .06s ease, box-shadow .06s ease;}
+.mj-player-card:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,0.32);}
+.mj-player-card.is-dealer{background:linear-gradient(180deg,#fdf6e4,#f0e4c4);box-shadow:0 4px 0 rgba(0,0,0,0.32),0 0 0 2px var(--gold);}
+.mj-dealer-crown{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--seal-red);
+  color:#fff8ef;font-family:'Noto Serif TC',serif;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:11px;
+  display:flex;align-items:center;gap:3px;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,0.35);}
+.mj-player-name{font-size:11.5px;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mj-player-score{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:700;}
+.mj-player-score.positive{color:#2f6b45;} .mj-player-score.negative{color:#a5321f;}
+.mj-player-chips{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;}
+.mj-chip{font-family:'Noto Serif TC',serif;font-size:9px;font-weight:700;padding:1px 5px;border-radius:7px;}
+.mj-chip.flower{background:#e8d3a0;color:#6b4a13;} .mj-chip.kong{background:#cfe0d2;color:#2f5a3c;}
+.mj-hub{text-align:center;padding:4px 2px;}
+.mj-hub-round{font-family:'Noto Serif TC',serif;font-size:16px;color:var(--gold);font-weight:700;}
+.mj-hub-wind{font-family:'Noto Serif TC',serif;font-size:10px;opacity:0.75;margin:1px 0 9px;}
+.mj-hub-btn{padding:11px 8px;font-size:12.5px;margin-bottom:0;border-radius:12px;}
+.mj-table-foot{max-width:460px;margin:16px auto 0;padding:0 14px 100px;display:flex;flex-direction:column;gap:12px;align-items:center;}
+.mj-foot-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+
+/* ---- aksi cepat ---- */
+.mj-quick-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.mj-quick-name{font-family:'Noto Serif TC',serif;font-size:18px;font-weight:700;}
+.mj-quick-sub{font-size:11.5px;opacity:0.6;margin-top:2px;}
+.mj-quick-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.mj-quick-btn{display:flex;flex-direction:column;align-items:center;gap:4px;border:none;border-radius:14px;
+  padding:14px 6px;cursor:pointer;transition:transform .06s ease, box-shadow .06s ease;}
+.mj-quick-btn.flower{background:linear-gradient(180deg,#dcae4c,#b98a2c);color:#2a2109;box-shadow:0 5px 0 #7d5c17;}
+.mj-quick-btn.kong{background:linear-gradient(180deg,#6ea37e,#4a7a58);color:#f3ecda;box-shadow:0 5px 0 #2f5039;}
+.mj-quick-btn:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,0.3);}
+.mj-quick-label{font-family:'Noto Serif TC',serif;font-size:11px;font-weight:700;}
+.mj-quick-val{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:0.8;}
+.mj-event-row{display:flex;align-items:center;gap:10px;background:rgba(243,236,218,0.06);border-radius:9px;padding:9px 11px;margin-bottom:6px;font-size:12.5px;}
+.mj-event-row span:first-child{flex:1;}
+.mj-event-val{font-family:'IBM Plex Mono',monospace;color:var(--bamboo);font-weight:700;}
+.mj-event-undo{background:none;border:none;color:var(--tile-ivory);opacity:0.5;cursor:pointer;display:flex;padding:2px;}
+.mj-winner-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.mj-winner-pick{display:flex;align-items:center;gap:8px;background:rgba(243,236,218,0.07);border:1px solid rgba(243,236,218,0.2);
+  color:var(--tile-ivory);border-radius:12px;padding:9px 10px;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left;}
+.mj-winner-pick.active{background:rgba(199,154,59,0.2);border-color:var(--gold);}
+.mj-winner-pick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mj-extra-fold{background:rgba(243,236,218,0.05);border-radius:10px;padding:4px 12px 8px;margin-bottom:10px;}
+.mj-extra-fold summary{font-size:12.5px;font-weight:600;color:var(--gold);padding:9px 0;cursor:pointer;}
+.mj-nav-item{gap:3px;}
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
 .mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
@@ -2829,6 +3119,7 @@ const CSS = `
 .mj-nav-item{background:none;border:none;color:var(--tile-ivory);opacity:0.55;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 6px;}
 .mj-nav-item.active{opacity:1;color:var(--gold);}
 .mj-nav-icon{font-family:'Noto Serif TC',serif;font-size:17px;}
+.mj-nav-item svg{margin-bottom:1px;}
 .mj-toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--tile-ivory);padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:60;max-width:88%;text-align:center;}
 @media (max-width:380px){ .mj-table-wrap{grid-template-columns:0.6fr 1.3fr 0.6fr;} }
 `;
