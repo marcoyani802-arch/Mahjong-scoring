@@ -449,13 +449,17 @@ function initialsOf(n) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
-function Avatar({ name, size, wind, dealer }) {
+function Avatar({ name, size, wind, dealer, title }) {
   const sz = size || 44;
   const h = hashName(name || '');
-  const [c1, c2] = AVATAR_COLORS[h % AVATAR_COLORS.length];
-  const gid = 'av' + (h % 100000);
+  let [c1, c2] = AVATAR_COLORS[h % AVATAR_COLORS.length];
+  const ach = title ? achievementById(title) : null;
+  const tier = ach ? TIERS[ach.tier] : null;
+  if (tier) { c1 = tier.grad[0]; c2 = tier.grad[1]; }
+  const gid = 'av' + (h % 100000) + (ach ? ach.id.replace(/[^a-z]/g, '') : '');
   return (
-    <div className={'mj-avatar-wrap' + (dealer ? ' dealer' : '')} style={{ width: sz, height: sz }}>
+    <div className={'mj-avatar-wrap' + (dealer ? ' dealer' : '') + (tier && tier.glow ? ' glow t' + ach.tier : '')}
+      style={{ width: sz, height: sz }}>
       <svg width={sz} height={sz} viewBox="0 0 48 48">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -463,11 +467,14 @@ function Avatar({ name, size, wind, dealer }) {
           </linearGradient>
         </defs>
         <circle cx="24" cy="24" r="23" fill={`url(#${gid})`} />
-        <circle cx="24" cy="24" r="23" fill="none" stroke="rgba(243,236,218,0.35)" strokeWidth="1.5" />
+        <circle cx="24" cy="24" r="23" fill="none" stroke={tier ? tier.color : 'rgba(243,236,218,0.35)'} strokeWidth={tier ? 2.5 : 1.5} />
         <text x="24" y="30" textAnchor="middle" fontSize="17" fontWeight="700"
           fill="#f3ecda" fontFamily="Inter, sans-serif">{initialsOf(name)}</text>
       </svg>
       {wind !== undefined && <span className="mj-avatar-wind">{WIND_GLYPH[wind]}</span>}
+      {ach && sz >= 34 && (
+        <span className="mj-avatar-badge" style={{ borderColor: tier.color, color: tier.color }}>{ach.badge}</span>
+      )}
     </div>
   );
 }
@@ -508,8 +515,273 @@ function Mascot({ mood, line, small }) {
   );
 }
 
+
+
+/* ============================ PANGKAT & PENCAPAIAN ============================ */
+const TIERS = {
+  1: { label: 'Pemula', color: '#9aa79d', grad: ['#7c8a80', '#5a655e'], glow: false },
+  2: { label: 'Perunggu', color: '#b87333', grad: ['#c08344', '#8a5320'], glow: false },
+  3: { label: 'Perak', color: '#c9c9c9', grad: ['#b9c2c6', '#7d878c'], glow: false },
+  4: { label: 'Emas', color: '#c79a3b', grad: ['#dcae4c', '#9a7420'], glow: true },
+  5: { label: 'Legendaris', color: '#e0574a', grad: ['#c8493b', '#7d1f14'], glow: true },
+};
+
+/* Hitung statistik tiap pemain dari seluruh riwayat game yang tersimpan. */
+function computePlayerStats(history) {
+  const map = {};
+  const get = (name) => {
+    const k = name.trim().toLowerCase();
+    if (!map[k]) map[k] = {
+      name, games: 0, gameWins: 0, totalPoints: 0, bestGame: -Infinity,
+      rounds: 0, roundWins: 0, selfDraws: 0, discardWins: 0, dealtIn: 0, draws: 0,
+      flowers: 0, kongAn: 0, kongMing: 0, bestHand: 0, limitHands: 0,
+      dealerWins: 0, maxDealerStreak: 0, cleanGames: 0, bigWinRounds: 0,
+    };
+    return map[k];
+  };
+
+  history.forEach((g) => {
+    const names = g.players.map((p) => p.name);
+    const maxNet = Math.max(...g.players.map((p) => p.net));
+    const limit = (MODES[g.mode] && MODES[g.mode].limit) || null;
+    const dealtInThisGame = [0, 0, 0, 0];
+    let streak = 0, streakOwner = null;
+
+    g.players.forEach((p, i) => {
+      const st = get(p.name);
+      st.games += 1;
+      st.totalPoints += p.net;
+      st.bestGame = Math.max(st.bestGame, p.net);
+      if (p.net === maxNet) st.gameWins += 1;
+    });
+
+    (g.rounds || []).slice().reverse().forEach((r) => {
+      names.forEach((n) => { get(n).rounds += 1; });
+      if (r.draw) { names.forEach((n) => { get(n).draws += 1; }); streak = 0; streakOwner = null; }
+      else {
+        const w = get(names[r.winnerIdx]);
+        w.roundWins += 1;
+        if (r.method === 'selfdraw') w.selfDraws += 1; else w.discardWins += 1;
+        w.bestHand = Math.max(w.bestHand, r.value || 0);
+        if (limit && (r.value || 0) >= limit) w.limitHands += 1;
+        if ((r.value || 0) >= 6) w.bigWinRounds += 1;
+        if (r.winnerIdx === r.dealerIdx) {
+          w.dealerWins += 1;
+          if (streakOwner === r.winnerIdx) streak += 1; else { streakOwner = r.winnerIdx; streak = 1; }
+          w.maxDealerStreak = Math.max(w.maxDealerStreak, streak);
+        } else { streak = 0; streakOwner = null; }
+        if (r.method === 'discard' && r.discarderIdx !== null && r.discarderIdx !== undefined) {
+          get(names[r.discarderIdx]).dealtIn += 1;
+          dealtInThisGame[r.discarderIdx] += 1;
+        }
+      }
+      (r.events || []).forEach((e) => {
+        const owner = get(names[e.playerIdx]);
+        if (e.type === 'flower') owner.flowers += 1;
+        else if (e.type === 'kongAn') owner.kongAn += 1;
+        else if (e.type === 'kongMing') owner.kongMing += 1;
+      });
+    });
+
+    g.players.forEach((p, i) => {
+      if (p.net > 0 && dealtInThisGame[i] === 0) get(p.name).cleanGames += 1;
+    });
+  });
+
+  Object.values(map).forEach((st) => {
+    st.kongs = st.kongAn + st.kongMing;
+    if (st.bestGame === -Infinity) st.bestGame = 0;
+  });
+  return map;
+}
+
+const EMPTY_STATS = {
+  games: 0, gameWins: 0, totalPoints: 0, bestGame: 0, rounds: 0, roundWins: 0,
+  selfDraws: 0, discardWins: 0, dealtIn: 0, draws: 0, flowers: 0, kongAn: 0,
+  kongMing: 0, kongs: 0, bestHand: 0, limitHands: 0, dealerWins: 0,
+  maxDealerStreak: 0, cleanGames: 0, bigWinRounds: 0,
+};
+
+/* 25 pencapaian, dari yang paling gampang sampai paling berat. */
+const ACHIEVEMENTS = [
+  { id: 'first_game', tier: 1, cn: '入門', title: 'Anak Meja', badge: '門',
+    name: 'Duduk Pertama', desc: 'Selesaikan 1 game.', metric: (s) => s.games, target: 1 },
+  { id: 'first_win_round', tier: 1, cn: '初和', title: 'Pemenang Ronde', badge: '和',
+    name: 'Hu Pertama', desc: 'Menangkan 1 ronde.', metric: (s) => s.roundWins, target: 1 },
+  { id: 'first_flower', tier: 1, cn: '拾花', title: 'Pemetik Bunga', badge: '花',
+    name: 'Bunga Pertama', desc: 'Dapatkan 1 ubin bunga.', metric: (s) => s.flowers, target: 1 },
+  { id: 'five_rounds', tier: 1, cn: '五局', title: 'Rutin Main', badge: '五',
+    name: 'Lima Ronde', desc: 'Mainkan 5 ronde.', metric: (s) => s.rounds, target: 5 },
+  { id: 'first_selfdraw', tier: 1, cn: '自摸', title: 'Penarik Ubin', badge: '摸',
+    name: 'Self-Draw Pertama', desc: 'Menang sekali dengan 自摸.', metric: (s) => s.selfDraws, target: 1 },
+
+  { id: 'three_games', tier: 2, cn: '三戰', title: 'Langganan Meja', badge: '常',
+    name: 'Tiga Game', desc: 'Selesaikan 3 game.', metric: (s) => s.games, target: 3 },
+  { id: 'first_kong', tier: 2, cn: '開槓', title: 'Pembuka Kong', badge: '槓',
+    name: 'Kong Pertama', desc: 'Dapatkan 1 kong.', metric: (s) => s.kongs, target: 1 },
+  { id: 'first_game_win', tier: 2, cn: '首勝', title: 'Juara Meja', badge: '勝',
+    name: 'Menang Satu Game', desc: 'Jadi pemain dengan poin tertinggi di 1 game.', metric: (s) => s.gameWins, target: 1 },
+  { id: 'ten_round_wins', tier: 2, cn: '十和', title: 'Tangan Panas', badge: '十',
+    name: 'Sepuluh Hu', desc: 'Menangkan 10 ronde.', metric: (s) => s.roundWins, target: 10 },
+  { id: 'flower_garden', tier: 2, cn: '花園', title: 'Tukang Kebun', badge: '園',
+    name: 'Kebun Bunga', desc: 'Kumpulkan 10 ubin bunga.', metric: (s) => s.flowers, target: 10 },
+
+  { id: 'dealer_double', tier: 3, cn: '連庄', title: 'Banker Bertahan', badge: '庄',
+    name: 'Banker Beruntun', desc: 'Menang 2 ronde berturut sebagai banker.', metric: (s) => s.maxDealerStreak, target: 2 },
+  { id: 'big_hand', tier: 3, cn: '大牌', title: 'Pemain Besar', badge: '大',
+    name: 'Tangan Besar', desc: 'Menang dengan tangan bernilai 6 atau lebih.', metric: (s) => s.bestHand, target: 6 },
+  { id: 'ten_games', tier: 3, cn: '十戰', title: 'Veteran Meja', badge: 'veteran',
+    name: 'Sepuluh Game', desc: 'Selesaikan 10 game.', metric: (s) => s.games, target: 10 },
+  { id: 'five_selfdraw', tier: 3, cn: '五摸', title: 'Tangan Peka', badge: '摸',
+    name: 'Lima Self-Draw', desc: 'Menang 5 kali dengan 自摸.', metric: (s) => s.selfDraws, target: 5 },
+  { id: 'kong_master', tier: 3, cn: '槓王', title: 'Raja Kong', badge: '槓',
+    name: 'Lima Kong', desc: 'Kumpulkan 5 kong.', metric: (s) => s.kongs, target: 5 },
+  { id: 'three_game_wins', tier: 3, cn: '三冠', title: 'Langganan Juara', badge: '冠',
+    name: 'Tiga Kali Juara', desc: 'Menangkan 3 game.', metric: (s) => s.gameWins, target: 3 },
+
+  { id: 'clean_game', tier: 4, cn: '無銃', title: 'Tembok Tak Tertembus', badge: '盾',
+    name: 'Tanpa放炮', desc: 'Menang poin di satu game tanpa sekali pun kena 放炮.', metric: (s) => s.cleanGames, target: 1 },
+  { id: 'concealed_kong', tier: 4, cn: '暗槓', title: 'Penyimpan Rahasia', badge: '暗',
+    name: 'Tiga Kong Tertutup', desc: 'Kumpulkan 3 暗槓.', metric: (s) => s.kongAn, target: 3 },
+  { id: 'fifty_wins', tier: 4, cn: '五十和', title: 'Ahli Meja', badge: '五十',
+    name: 'Lima Puluh Hu', desc: 'Menangkan 50 ronde.', metric: (s) => s.roundWins, target: 50 },
+  { id: 'dealer_triple', tier: 4, cn: '三連庄', title: 'Banker Kokoh', badge: '庄',
+    name: 'Banker Tiga Beruntun', desc: 'Menang 3 ronde berturut sebagai banker.', metric: (s) => s.maxDealerStreak, target: 3 },
+  { id: 'big_night', tier: 4, cn: '大勝', title: 'Pulang Bawa Karung', badge: '財',
+    name: 'Kemenangan Besar', desc: 'Akhiri satu game dengan selisih +100 poin atau lebih.', metric: (s) => s.bestGame, target: 100 },
+  { id: 'ten_big_hands', tier: 4, cn: '十大牌', title: 'Pemburu Tangan Besar', badge: '獵',
+    name: 'Sepuluh Tangan Besar', desc: 'Menang 10 kali dengan nilai 6 atau lebih.', metric: (s) => s.bigWinRounds, target: 10 },
+
+  { id: 'limit_hand', tier: 5, cn: '滿貫', title: 'Penakluk Batas', badge: '滿',
+    name: 'Tangan Maksimum', desc: 'Menang dengan tangan yang mencapai batas maksimum ruleset.', metric: (s) => s.limitHands, target: 1 },
+  { id: 'dealer_five', tier: 5, cn: '五連庄', title: 'Banker Abadi', badge: '皇',
+    name: 'Banker Lima Beruntun', desc: 'Menang 5 ronde berturut sebagai banker.', metric: (s) => s.maxDealerStreak, target: 5 },
+  { id: 'grand_master', tier: 5, cn: '雀聖', title: '雀聖 Dewa Mahjong', badge: '聖',
+    name: 'Dewa Mahjong', desc: 'Menangkan 25 game.', metric: (s) => s.gameWins, target: 25 },
+];
+
+function achievementState(a, stats) {
+  const cur = Math.max(0, a.metric(stats || EMPTY_STATS));
+  return { cur: Math.min(cur, a.target), target: a.target, unlocked: cur >= a.target, pct: Math.min(100, Math.round((cur / a.target) * 100)) };
+}
+
+function unlockedList(stats) {
+  return ACHIEVEMENTS.filter((a) => achievementState(a, stats).unlocked);
+}
+
+function achievementById(id) {
+  return ACHIEVEMENTS.find((a) => a.id === id) || null;
+}
+
+/* ============================ RINCIAN POIN PER PEMAIN ============================ */
+/*
+  Menyusun asal-usul poin tiap pemain dalam satu ronde:
+  pembayaran tangan, bunga, kong, transfer, dan koreksi manual.
+*/
+function buildLedger(entry, names) {
+  const lines = [[], [], [], []];
+  const w = entry.winnerIdx;
+
+  // Pembayaran nilai tangan
+  (entry.winLines || []).forEach((l) => {
+    lines[l.from].push({
+      label: `Bayar tangan ke ${names[w]}`,
+      note: l.doubled ? 'dilipatduakan karena melibatkan 庄' : null,
+      amount: -l.amount,
+    });
+    lines[w].push({
+      label: `Terima dari ${names[l.from]}`,
+      note: l.doubled ? '庄 ×2' : null,
+      amount: l.amount,
+    });
+  });
+
+  // Bunga, kong, transfer, koreksi
+  (entry.events || []).forEach((e) => {
+    if (e.type === 'flower' || e.type === 'kongAn' || e.type === 'kongMing') {
+      const nm = e.type === 'flower' ? '花 Bunga' : e.type === 'kongAn' ? '暗槓 Kong tertutup' : '明槓 Kong terbuka';
+      lines[e.playerIdx].push({ label: nm, note: `${e.units} × 3 pembayar`, amount: e.units * 3 });
+      [0, 1, 2, 3].forEach((p) => {
+        if (p !== e.playerIdx) lines[p].push({ label: `Bayar ${nm} ${names[e.playerIdx]}`, amount: -e.units });
+      });
+    } else if (e.type === 'transfer') {
+      lines[e.fromIdx].push({ label: `Transfer ke ${names[e.playerIdx]}`, amount: -e.units });
+      lines[e.playerIdx].push({ label: `Transfer dari ${names[e.fromIdx]}`, amount: e.units });
+    } else if (e.type === 'adjust') {
+      lines[e.playerIdx].push({ label: e.note || 'Koreksi manual', amount: e.units });
+    }
+  });
+
+  return lines;
+}
+
+function RoundLedger({ entry, names, dealerIdx, unit, open }) {
+  const ledger = buildLedger(entry, names);
+  const order = [0, 1, 2, 3].slice().sort((a, b) => entry.deltas[b] - entry.deltas[a]);
+  return (
+    <div className="mj-ledger">
+      {order.map((i) => {
+        const rows = ledger[i];
+        const total = entry.deltas[i];
+        return (
+          <div key={i} className={'mj-ledger-card' + (!entry.draw && entry.winnerIdx === i ? ' winner' : '')}>
+            <div className="mj-ledger-head">
+              <Avatar name={names[i]} size={30} wind={seatWindOf(i, dealerIdx)} dealer={i === dealerIdx} />
+              <span className="mj-ledger-name">
+                {names[i]}
+                {!entry.draw && entry.winnerIdx === i && <span className="mj-ledger-tag">和 menang</span>}
+                {!entry.draw && entry.discarderIdx === i && <span className="mj-ledger-tag fire">放炮</span>}
+              </span>
+              <span className={'mj-ledger-total' + (total > 0 ? ' positive' : total < 0 ? ' negative' : '')}>
+                {total > 0 ? '+' : ''}{total}
+              </span>
+            </div>
+            {rows.length === 0 ? (
+              <div className="mj-ledger-none">Tidak ada perpindahan poin.</div>
+            ) : (
+              <div className="mj-ledger-rows">
+                {rows.map((r, k) => (
+                  <div key={k} className="mj-ledger-row">
+                    <span className="mj-ledger-label">
+                      {r.label}
+                      {r.note && <span className="mj-ledger-note">{r.note}</span>}
+                    </span>
+                    <span className={'mj-ledger-amt' + (r.amount > 0 ? ' positive' : ' negative')}>
+                      {r.amount > 0 ? '+' : ''}{r.amount}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WinnerHandBox({ entry, names, unit }) {
+  if (entry.draw) {
+    return <div className="mj-concl-box"><div className="mj-concl-title">流局 Seri</div>
+      <div className="mj-ledger-none">Tidak ada pemenang. Hanya bunga, kong, dan koreksi yang berpengaruh.</div></div>;
+  }
+  return (
+    <div className="mj-concl-box">
+      <div className="mj-concl-title">Tangan {names[entry.winnerIdx]}</div>
+      <div className="mj-concl-line"><span>Cara menang</span>
+        <span>{entry.method === 'selfdraw' ? '自摸 Self-draw' : `放炮 dari ${names[entry.discarderIdx]}`}</span></div>
+      <div className="mj-concl-line"><span>Pola dasar</span><span>{entry.baseValue}</span></div>
+      {(entry.fanLines || []).map((l, i) => (
+        <div key={i} className="mj-concl-line"><span>{l.label}</span><span>+{l.value}</span></div>
+      ))}
+      <div className="mj-concl-line total"><span>Nilai tangan</span><span>{entry.value} {unit}</span></div>
+      {entry.cappedAt && <div className="mj-concl-cap">Dibatasi maksimum {entry.cappedAt} {unit}.</div>}
+    </div>
+  );
+}
+
 /* ============================ MESIN PERHITUNGAN RONDE ============================ */
-const APP_BUILD = 'v11';
+const APP_BUILD = 'v13';
 const WIND_GLYPH = ['東', '南', '西', '北'];
 const DIE_PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
@@ -836,6 +1108,7 @@ const BACKUP_KEY = 'mahjong-predemo-backup-v2';
 const STATS_KEY = 'mahjong-player-stats-v2';
 const HISTORY_KEY = 'mahjong-game-history-v2';
 const PROFILE_KEY = 'mahjong-profile-v2';
+const TITLES_KEY = 'mahjong-titles-v1';
 const SEAT_CLASS = ['seat-bottom', 'seat-right', 'seat-top', 'seat-left'];
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -875,6 +1148,9 @@ function MahjongApp() {
   const [joinError, setJoinError] = useState('');
   const [lbFilter, setLbFilter] = useState('all');
   const [expandedGame, setExpandedGame] = useState(null);
+  const [openRound, setOpenRound] = useState(null);
+  const [titles, setTitles] = useState({});
+  const [achPlayer, setAchPlayer] = useState(null);
 
   const [showAddRound, setShowAddRound] = useState(false);
   const [showHistorySheet, setShowHistorySheet] = useState(false);
@@ -944,9 +1220,11 @@ function MahjongApp() {
       const safeGet = async (key, shared) => {
         try { const r = await window.storage.get(key, shared); return r ? r.value : null; } catch (e) { return null; }
       };
-      const [p, s, h, a] = await Promise.all([
+      const [p, s, h, a, t] = await Promise.all([
         safeGet(PROFILE_KEY, false), safeGet(STATS_KEY, false), safeGet(HISTORY_KEY, false), safeGet(ACTIVE_KEY, false),
+        safeGet(TITLES_KEY, false),
       ]);
+      if (t) { try { setTitles(JSON.parse(t)); } catch (e) {} }
       if (p) { try { setProfile(JSON.parse(p)); } catch (e) {} }
       if (s) { try { setStats(JSON.parse(s)); } catch (e) {} }
       if (h) { try { const hh = JSON.parse(h); setHistory(hh); setDemoOn(hh.some((x) => x.demo)); } catch (e) {} }
@@ -963,6 +1241,7 @@ function MahjongApp() {
   useEffect(() => { if (loaded) (async () => { try { await window.storage.set(STATS_KEY, JSON.stringify(stats), false); } catch (e) {} })(); }, [stats, loaded]);
   useEffect(() => { if (loaded) (async () => { try { await window.storage.set(HISTORY_KEY, JSON.stringify(history), false); } catch (e) {} })(); }, [history, loaded]);
   useEffect(() => { if (loaded && profile) (async () => { try { await window.storage.set(PROFILE_KEY, JSON.stringify(profile), false); } catch (e) {} })(); }, [profile, loaded]);
+  useEffect(() => { if (loaded) (async () => { try { await window.storage.set(TITLES_KEY, JSON.stringify(titles), false); } catch (e) {} })(); }, [titles, loaded]);
 
   useEffect(() => {
     if (!game) { prevScores.current = null; return; }
@@ -1580,6 +1859,18 @@ Balas HANYA JSON, tanpa markdown:
   }
   const leaderboardData = (lbFilter === 'all' ? statsArr : weeklyStats()).sort((a, b) => b.totalPoints - a.totalPoints);
 
+  const playerStats = computePlayerStats(history);
+  const nameKey = (n) => String(n || '').trim().toLowerCase();
+  const statsFor = (n) => playerStats[nameKey(n)] || EMPTY_STATS;
+  const titleOf = (n) => titles[nameKey(n)] || null;
+
+  function equipTitle(name, id) {
+    const k = nameKey(name);
+    setTitles({ ...titles, [k]: titles[k] === id ? null : id });
+    buzz(14);
+    showToast(titles[k] === id ? 'Pangkat dilepas' : 'Pangkat dipasang');
+  }
+
   function renderNav(active) {
     return (
       <div className="mj-nav">
@@ -1814,9 +2105,12 @@ Balas HANYA JSON, tanpa markdown:
             {leaderboardData.map((p, i) => (
               <div key={p.name + i} className="mj-lb-row mj-lb-row-full">
                 <span className={'mj-lb-rank' + (i < 3 ? ' medal medal-' + i : '')}>{i + 1}</span>
+                <Avatar name={p.name} size={30} title={titleOf(p.name)} />
                 <div className="mj-lb-info">
                   <span className="mj-lb-name">{p.name}</span>
-                  <span className="mj-lb-sub">{p.gamesPlayed} game · {p.wins || 0} menang</span>
+                  <span className="mj-lb-sub">
+                    {titleOf(p.name) ? achievementById(titleOf(p.name)).title + ' · ' : ''}{p.gamesPlayed} game
+                  </span>
                 </div>
                 <span className={'mj-lb-points' + (p.totalPoints < 0 ? ' negative' : ' positive')}>
                   {p.totalPoints > 0 ? '+' : ''}{p.totalPoints}</span>
@@ -1862,14 +2156,31 @@ Balas HANYA JSON, tanpa markdown:
                 </div>
                 {isOpen && (
                   <div className="mj-history-rounds">
-                    {h.rounds.slice().reverse().map((r) => (
-                      <div key={r.id} className="mj-history-row">
-                        <div className="mj-history-round">局{r.roundNum}</div>
-                        <div className="mj-history-desc">
-                          {r.draw ? 'Seri (流局)' : `${h.players[r.winnerIdx].name} menang · ${r.method === 'selfdraw' ? '自摸' : `放炮 dari ${h.players[r.discarderIdx].name}`} · ${r.value} ${cfg.unit}`}
+                    {h.rounds.slice().reverse().map((r) => {
+                      const nm = h.players.map((p) => p.name);
+                      const openK = h.id + ':' + r.id;
+                      const isOpenR = openRound === openK;
+                      return (
+                        <div key={r.id} className="mj-history-row">
+                          <div className="mj-history-head" onClick={() => setOpenRound(isOpenR ? null : openK)}>
+                            <div style={{ flex: 1 }}>
+                              <div className="mj-history-round">局{r.roundNum}</div>
+                              <div className="mj-history-desc">
+                                {r.draw ? 'Seri (流局)' : `${nm[r.winnerIdx]} menang · ${r.method === 'selfdraw' ? '自摸' : `放炮 dari ${nm[r.discarderIdx]}`} · ${r.value} ${cfg.unit}`}
+                              </div>
+                            </div>
+                            <span className="mj-history-card-toggle">{isOpenR ? '−' : '+'}</span>
+                          </div>
+                          {isOpenR && (
+                            <div className="mj-history-detail">
+                              <WinnerHandBox entry={r} names={nm} unit={cfg.unit} />
+                              <div className="mj-ledger-title">Rincian Poin Tiap Pemain</div>
+                              <RoundLedger entry={r} names={nm} dealerIdx={r.dealerIdx} unit={cfg.unit} />
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2497,6 +2808,111 @@ Balas HANYA JSON, tanpa markdown:
     );
   }
 
+
+  /* -------------------- PANGKAT & PENCAPAIAN -------------------- */
+  if (view === 'achievements') {
+    const who = achPlayer || (profile && profile.name) || (Object.values(playerStats)[0] || {}).name || '';
+    const st = statsFor(who);
+    const equipped = titleOf(who);
+    const allNames = Array.from(new Set([
+      ...(profile ? [profile.name] : []),
+      ...Object.values(playerStats).map((p) => p.name),
+      ...(game ? game.players.map((p) => p.name) : []),
+    ])).filter(Boolean);
+    const unlocked = unlockedList(st);
+
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <button className="mj-back-btn" onClick={() => setView('profile')}>← Profil</button>
+          <div className="mj-page-title">Pangkat & Pencapaian</div>
+
+          {allNames.length > 1 && (
+            <div className="mj-card">
+              <div className="mj-label">Lihat punya siapa</div>
+              <div className="mj-choice-row" style={{ marginBottom: 0 }}>
+                {allNames.map((n) => (
+                  <button key={n} className={'mj-choice-btn' + (who === n ? ' active' : '')} onClick={() => setAchPlayer(n)}>{n}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mj-card mj-ach-hero">
+            <Avatar name={who} size={72} title={equipped} />
+            <div>
+              <div className="mj-ach-name">{who || 'Belum ada pemain'}</div>
+              {equipped ? (
+                <div className="mj-ach-equipped" style={{ color: TIERS[achievementById(equipped).tier].color }}>
+                  {achievementById(equipped).cn} · {achievementById(equipped).title}
+                </div>
+              ) : (
+                <div className="mj-ach-equipped none">Belum memasang pangkat</div>
+              )}
+              <div className="mj-ach-count">{unlocked.length} dari {ACHIEVEMENTS.length} pencapaian terbuka</div>
+            </div>
+          </div>
+
+          <div className="mj-ach-progress">
+            <div className="mj-ach-bar"><span style={{ width: (unlocked.length / ACHIEVEMENTS.length * 100) + '%' }} /></div>
+          </div>
+
+          {[1, 2, 3, 4, 5].map((t) => {
+            const list = ACHIEVEMENTS.filter((a) => a.tier === t);
+            return (
+              <div key={t} className="mj-ach-tier">
+                <div className="mj-ach-tier-head" style={{ color: TIERS[t].color }}>
+                  {TIERS[t].label}
+                  <span className="mj-ach-tier-count">
+                    {list.filter((a) => achievementState(a, st).unlocked).length}/{list.length}
+                  </span>
+                </div>
+                {list.map((a) => {
+                  const s2 = achievementState(a, st);
+                  const isOn = equipped === a.id;
+                  return (
+                    <div key={a.id} className={'mj-ach-card' + (s2.unlocked ? ' unlocked t' + t : ' locked')}>
+                      <div className="mj-ach-badge" style={s2.unlocked ? { borderColor: TIERS[t].color, color: TIERS[t].color } : {}}>
+                        {s2.unlocked ? a.badge : '?'}
+                      </div>
+                      <div className="mj-ach-body">
+                        <div className="mj-ach-title">{a.name}</div>
+                        <div className="mj-ach-desc">{a.desc}</div>
+                        {!s2.unlocked && (
+                          <div className="mj-ach-prog">
+                            <div className="mj-ach-prog-bar"><span style={{ width: s2.pct + '%' }} /></div>
+                            <span className="mj-ach-prog-num">{s2.cur}/{s2.target}</span>
+                          </div>
+                        )}
+                        {s2.unlocked && (
+                          <div className="mj-ach-reward" style={{ color: TIERS[t].color }}>
+                            Pangkat: {a.cn} {a.title}
+                          </div>
+                        )}
+                      </div>
+                      {s2.unlocked && who && (
+                        <button className={'mj-ach-equip' + (isOn ? ' on' : '')} onClick={() => equipTitle(who, a.id)}>
+                          {isOn ? 'Dipakai' : 'Pakai'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          <div className="mj-disclaimer">
+            Pencapaian dihitung dari riwayat game yang tersimpan di perangkat ini saja. Kalau riwayat dihapus, hitungannya ikut mundur.
+          </div>
+        </div>
+        {renderNav('profile')}
+        {renderToast()}
+      </div>
+    );
+  }
+
   /* -------------------- PROFILE -------------------- */
   if (view === 'profile') {
     return (
@@ -2534,6 +2950,20 @@ Balas HANYA JSON, tanpa markdown:
               </div>
             </div>
           )}
+          <div className="mj-card mj-ach-entry" onClick={() => { setAchPlayer(profile ? profile.name : null); setView('achievements'); }}>
+            <div className="mj-row-between" style={{ marginBottom: 0 }}>
+              <div>
+                <div className="mj-continue-title">Pangkat & Pencapaian</div>
+                <div className="mj-continue-sub">
+                  {profile
+                    ? `${unlockedList(statsFor(profile.name)).length}/${ACHIEVEMENTS.length} terbuka`
+                    : 'Isi nama dulu untuk mulai mengumpulkan'}
+                </div>
+              </div>
+              <div className="mj-continue-arrow">→</div>
+            </div>
+          </div>
+
           <div className="mj-card">
             <div className="mj-label">API Key (untuk hitung dari ubin)</div>
             {apiKeySaved ? (
@@ -2628,8 +3058,14 @@ Balas HANYA JSON, tanpa markdown:
                     <span className="mj-hu-btn" role="button" tabIndex={0}
                       onClick={(e) => { e.stopPropagation(); buzz(18); openAddRound(undefined, i); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openAddRound(undefined, i); } }}>和</span>
-                    <Avatar name={p.name} size={vw >= 1100 ? 72 : vw >= 820 ? 60 : 44} wind={seatWindOf(i, game.dealerIdx)} dealer={i === game.dealerIdx} />
+                    <Avatar name={p.name} size={vw >= 1100 ? 72 : vw >= 820 ? 60 : 44} wind={seatWindOf(i, game.dealerIdx)}
+                      dealer={i === game.dealerIdx} title={titleOf(p.name)} />
                     <span className="mj-player-name">{p.name}</span>
+                    {titleOf(p.name) && (
+                      <span className="mj-player-title" style={{ color: TIERS[achievementById(titleOf(p.name)).tier].grad[1] }}>
+                        {achievementById(titleOf(p.name)).title}
+                      </span>
+                    )}
                     <span className={'mj-player-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')
                       + (floaters.some((f) => f.seat === i) ? ' bump' : '')}>
                       {p.score > 0 ? '+' : ''}{p.score}
@@ -2788,34 +3224,10 @@ Balas HANYA JSON, tanpa markdown:
                 </div>
                 <div className="mj-recap-title">Rekapitulasi 局{e.roundNum}</div>
 
-                {!e.draw && (
-                  <div className="mj-concl-box">
-                    <div className="mj-concl-line"><span>Pola dasar</span><span>{e.baseValue}</span></div>
-                    {(e.fanLines || []).map((l, i) => (
-                      <div key={i} className="mj-concl-line"><span>{l.label}</span><span>+{l.value}</span></div>
-                    ))}
-                    <div className="mj-concl-line total"><span>Nilai tangan</span><span>{e.value} {lastRecap.unit}</span></div>
-                    <div className="mj-concl-line"><span>Cara menang</span>
-                      <span>{e.method === 'selfdraw' ? '自摸' : `放炮 ${names[e.discarderIdx]}`}</span></div>
-                  </div>
-                )}
+                <WinnerHandBox entry={e} names={names} unit={lastRecap.unit} />
 
-                <div className="mj-concl-box final">
-                  <div className="mj-concl-title">Perolehan Akhir Ronde</div>
-                  {names.map((n, i) => (
-                    <div key={i} className={'mj-final-row' + (!e.draw && e.winnerIdx === i ? ' winner' : '')}>
-                      <Avatar name={n} size={28} wind={seatWindOf(i, lastRecap.dealerIdx)} />
-                      <span className="mj-final-name">{n}</span>
-                      <span className="mj-final-detail">
-                        {e.winDeltas[i] !== 0 && <span>tangan {e.winDeltas[i] > 0 ? '+' : ''}{e.winDeltas[i]}</span>}
-                        {e.sideDeltas[i] !== 0 && <span>bonus {e.sideDeltas[i] > 0 ? '+' : ''}{e.sideDeltas[i]}</span>}
-                      </span>
-                      <span className={'mj-final-amt' + (e.deltas[i] > 0 ? ' positive' : e.deltas[i] < 0 ? ' negative' : '')}>
-                        {e.deltas[i] > 0 ? '+' : ''}{e.deltas[i]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <div className="mj-ledger-title">Rincian Poin Tiap Pemain</div>
+                <RoundLedger entry={e} names={names} dealerIdx={lastRecap.dealerIdx} unit={lastRecap.unit} />
 
                 <div className="mj-concl-box">
                   <div className="mj-concl-title">Skor Berjalan</div>
@@ -2837,7 +3249,8 @@ Balas HANYA JSON, tanpa markdown:
             <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="mj-sheet-handle" />
               <div className="mj-quick-head">
-                <Avatar name={game.players[quickPlayer].name} size={52} wind={seatWindOf(quickPlayer, game.dealerIdx)} dealer={quickPlayer === game.dealerIdx} />
+                <Avatar name={game.players[quickPlayer].name} size={52} wind={seatWindOf(quickPlayer, game.dealerIdx)}
+                  dealer={quickPlayer === game.dealerIdx} title={titleOf(game.players[quickPlayer].name)} />
                 <div>
                   <div className="mj-quick-name">{game.players[quickPlayer].name}</div>
                   <div className="mj-quick-sub">
@@ -3105,31 +3518,37 @@ Balas HANYA JSON, tanpa markdown:
               <div className="mj-sheet-title">Riwayat Ronde</div>
               <div className="mj-history-list">
                 {game.history.length === 0 && <div className="mj-empty">Belum ada ronde.</div>}
-                {game.history.map((h) => (
-                  <div key={h.id} className="mj-history-row">
-                    <div className="mj-history-round">局{h.roundNum} · {WIND_GLYPH[h.roundWind || 0]}圈</div>
-                    <div className="mj-history-desc">
-                      {h.draw ? 'Seri (流局)' : `${game.players[h.winnerIdx].name} menang · ${h.method === 'selfdraw' ? '自摸' : `放炮 dari ${game.players[h.discarderIdx].name}`} · ${h.value} ${cfg.unit}`}
-                    </div>
-                    {!h.draw && h.bonusFan > 0 && (
-                      <div className="mj-history-sub">pola {h.baseValue} + bonus {h.bonusFan}</div>
-                    )}
-                    {h.bonuses && h.bonuses.some((b) => b.flowers || b.kongAn || b.kongMing) && (
-                      <div className="mj-history-sub">
-                        {h.bonuses.map((b, i) => (b.flowers || b.kongAn || b.kongMing)
-                          ? `${game.players[i].name}: ${b.flowers}花 ${b.kongAn}暗 ${b.kongMing}明` : null)
-                          .filter(Boolean).join(' · ')}
+                {game.history.map((h) => {
+                  const names = game.players.map((p) => p.name);
+                  const isOpen = openRound === h.id;
+                  return (
+                    <div key={h.id} className="mj-history-row">
+                      <div className="mj-history-head" onClick={() => setOpenRound(isOpen ? null : h.id)}>
+                        <div style={{ flex: 1 }}>
+                          <div className="mj-history-round">局{h.roundNum} · {WIND_GLYPH[h.roundWind || 0]}圈</div>
+                          <div className="mj-history-desc">
+                            {h.draw ? 'Seri (流局)' : `${names[h.winnerIdx]} menang · ${h.method === 'selfdraw' ? '自摸' : `放炮 dari ${names[h.discarderIdx]}`} · ${h.value} ${cfg.unit}`}
+                          </div>
+                        </div>
+                        <span className="mj-history-card-toggle">{isOpen ? '−' : '+'}</span>
                       </div>
-                    )}
-                    <div className="mj-history-deltas">
-                      {h.deltas.map((d, i) => (
-                        <span key={i} className={d > 0 ? 'positive' : d < 0 ? 'negative' : 'zero'}>
-                          {game.players[i].name.split(' ')[0]} {d > 0 ? '+' : ''}{d}
-                        </span>
-                      ))}
+                      <div className="mj-history-deltas">
+                        {h.deltas.map((d, i) => (
+                          <span key={i} className={d > 0 ? 'positive' : d < 0 ? 'negative' : 'zero'}>
+                            {names[i].split(' ')[0]} {d > 0 ? '+' : ''}{d}
+                          </span>
+                        ))}
+                      </div>
+                      {isOpen && (
+                        <div className="mj-history-detail">
+                          <WinnerHandBox entry={h} names={names} unit={cfg.unit} />
+                          <div className="mj-ledger-title">Rincian Poin Tiap Pemain</div>
+                          <RoundLedger entry={h} names={names} dealerIdx={h.dealerIdx} unit={cfg.unit} />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <button className="mj-ghost-btn" onClick={() => setShowHistorySheet(false)}>Tutup</button>
             </div>
@@ -3527,6 +3946,67 @@ const CSS = `
 }
 .mj-build{font-size:9.5px;opacity:0.6;margin-left:6px;font-family:'IBM Plex Mono',monospace;}
 .mj-build-line{font-size:10.5px;opacity:0.4;margin-top:6px;font-family:'IBM Plex Mono',monospace;}
+
+.mj-ledger-title{font-family:'Noto Serif TC',serif;font-size:13.5px;font-weight:700;color:var(--gold);margin:14px 0 8px;}
+.mj-ledger{display:grid;gap:9px;}
+.mj-ledger-card{background:rgba(243,236,218,0.06);border:1px solid rgba(243,236,218,0.13);border-radius:12px;padding:11px 13px;}
+.mj-ledger-card.winner{border-color:var(--gold);background:rgba(199,154,59,0.1);}
+.mj-ledger-head{display:flex;align-items:center;gap:9px;margin-bottom:7px;}
+.mj-ledger-name{flex:1;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.mj-ledger-tag{font-size:9.5px;background:var(--bamboo);color:#fff8ef;padding:2px 7px;border-radius:9px;font-weight:700;}
+.mj-ledger-tag.fire{background:var(--seal-red);}
+.mj-ledger-total{font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:700;opacity:0.45;}
+.mj-ledger-total.positive{color:var(--bamboo);opacity:1;} .mj-ledger-total.negative{color:#ff8a7a;opacity:1;}
+.mj-ledger-rows{border-top:1px solid rgba(243,236,218,0.1);padding-top:6px;}
+.mj-ledger-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12px;}
+.mj-ledger-label{opacity:0.85;display:flex;flex-direction:column;}
+.mj-ledger-note{font-size:10px;opacity:0.55;margin-top:1px;}
+.mj-ledger-amt{font-family:'IBM Plex Mono',monospace;font-weight:700;flex-shrink:0;}
+.mj-ledger-amt.positive{color:var(--bamboo);} .mj-ledger-amt.negative{color:#ff8a7a;}
+.mj-ledger-none{font-size:11.5px;opacity:0.5;padding:3px 0;}
+.mj-history-head{display:flex;align-items:flex-start;gap:8px;cursor:pointer;}
+.mj-history-detail{margin-top:10px;border-top:1px solid rgba(243,236,218,0.12);padding-top:10px;}
+
+.mj-avatar-badge{position:absolute;top:-3px;left:-4px;background:var(--felt-shadow);border:1.5px solid;
+  font-family:'Noto Serif TC',serif;font-size:9px;font-weight:700;min-width:16px;height:16px;padding:0 3px;
+  border-radius:9px;display:flex;align-items:center;justify-content:center;line-height:1;}
+@keyframes mj-aura{0%,100%{box-shadow:0 0 0 0 rgba(199,154,59,0.5);}50%{box-shadow:0 0 0 6px rgba(199,154,59,0);}}
+.mj-avatar-wrap.glow{border-radius:50%;animation:mj-aura 2.4s ease-in-out infinite;}
+.mj-avatar-wrap.glow.t5{animation-duration:1.6s;}
+.mj-player-title{font-size:9.5px;font-weight:700;letter-spacing:0.02em;margin-top:-1px;}
+.mj-ach-entry{cursor:pointer;border-color:var(--gold);}
+.mj-ach-hero{display:flex;align-items:center;gap:14px;}
+.mj-ach-name{font-family:'Noto Serif TC',serif;font-size:19px;font-weight:700;}
+.mj-ach-equipped{font-size:12.5px;font-weight:700;margin-top:2px;}
+.mj-ach-equipped.none{opacity:0.5;font-weight:400;color:var(--tile-ivory);}
+.mj-ach-count{font-size:11.5px;opacity:0.6;margin-top:4px;}
+.mj-ach-progress{margin-bottom:16px;}
+.mj-ach-bar{height:6px;background:rgba(243,236,218,0.12);border-radius:4px;overflow:hidden;}
+.mj-ach-bar span{display:block;height:100%;background:linear-gradient(90deg,#7c8a80,#b87333,#c9c9c9,#c79a3b,#c8493b);border-radius:4px;transition:width .4s ease;}
+.mj-ach-tier{margin-bottom:18px;}
+.mj-ach-tier-head{display:flex;align-items:center;justify-content:space-between;font-family:'Noto Serif TC',serif;
+  font-size:14px;font-weight:700;margin-bottom:9px;letter-spacing:0.04em;}
+.mj-ach-tier-count{font-family:'IBM Plex Mono',monospace;font-size:11.5px;opacity:0.75;}
+.mj-ach-card{display:flex;align-items:center;gap:11px;background:rgba(243,236,218,0.05);
+  border:1px solid rgba(243,236,218,0.1);border-radius:12px;padding:11px 12px;margin-bottom:8px;}
+.mj-ach-card.locked{opacity:0.5;}
+.mj-ach-card.unlocked{background:rgba(243,236,218,0.08);}
+.mj-ach-card.unlocked.t4{border-color:rgba(199,154,59,0.5);}
+.mj-ach-card.unlocked.t5{border-color:rgba(200,73,59,0.6);background:rgba(200,73,59,0.1);}
+.mj-ach-badge{width:40px;height:40px;border-radius:11px;border:2px solid rgba(243,236,218,0.2);
+  display:flex;align-items:center;justify-content:center;font-family:'Noto Serif TC',serif;
+  font-size:16px;font-weight:700;flex-shrink:0;opacity:0.9;}
+.mj-ach-body{flex:1;min-width:0;}
+.mj-ach-title{font-size:13.5px;font-weight:700;}
+.mj-ach-desc{font-size:11.5px;opacity:0.65;line-height:1.45;margin-top:2px;}
+.mj-ach-reward{font-size:11px;font-weight:700;margin-top:4px;}
+.mj-ach-prog{display:flex;align-items:center;gap:8px;margin-top:6px;}
+.mj-ach-prog-bar{flex:1;height:4px;background:rgba(243,236,218,0.12);border-radius:3px;overflow:hidden;}
+.mj-ach-prog-bar span{display:block;height:100%;background:var(--gold);border-radius:3px;}
+.mj-ach-prog-num{font-family:'IBM Plex Mono',monospace;font-size:10.5px;opacity:0.6;}
+.mj-ach-equip{background:rgba(243,236,218,0.1);border:1px solid rgba(243,236,218,0.25);color:var(--tile-ivory);
+  border-radius:9px;padding:8px 11px;font-size:11.5px;font-weight:700;cursor:pointer;flex-shrink:0;}
+.mj-ach-equip.on{background:var(--gold);color:var(--ink);border-color:var(--gold);}
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
 .mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
