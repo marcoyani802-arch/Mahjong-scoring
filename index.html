@@ -381,6 +381,7 @@ function Mascot({ mood, line, small }) {
 
 /* ============================ MESIN PERHITUNGAN RONDE ============================ */
 const WIND_GLYPH = ['東', '南', '西', '北'];
+const DIE_PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
 
 // Angin duduk pemain i: banker selalu Timur, lalu berlawanan jarum jam.
@@ -761,6 +762,14 @@ function MahjongApp() {
   const [transferTo, setTransferTo] = useState(null);
   const [transferAmt, setTransferAmt] = useState('');
   const [lastRecap, setLastRecap] = useState(null);
+  const [floaters, setFloaters] = useState([]);
+  const [showDice, setShowDice] = useState(false);
+  const [dice, setDice] = useState([1, 1]);
+  const [rolling, setRolling] = useState(false);
+  const [wakeOn, setWakeOn] = useState(false);
+  const [tick, setTick] = useState(0);
+  const prevScores = useRef(null);
+  const wakeRef = useRef(null);
   const [formBonuses, setFormBonuses] = useState([emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()]);
   const [formExtra, setFormExtra] = useState({});
 
@@ -826,10 +835,72 @@ function MahjongApp() {
   useEffect(() => { if (loaded && profile) (async () => { try { await window.storage.set(PROFILE_KEY, JSON.stringify(profile), false); } catch (e) {} })(); }, [profile, loaded]);
 
   useEffect(() => {
+    if (!game) { prevScores.current = null; return; }
+    const cur = game.players.map((p) => p.score);
+    const prev = prevScores.current;
+    prevScores.current = cur;
+    if (!prev || prev.length !== 4) return;
+    const news = [];
+    cur.forEach((v, i) => {
+      const d = v - prev[i];
+      if (d !== 0) news.push({ id: Math.random(), seat: i, d });
+    });
+    if (news.length) {
+      setFloaters((f) => [...f, ...news]);
+      setTimeout(() => setFloaters((f) => f.filter((x) => !news.some((n) => n.id === x.id))), 1400);
+    }
+  }, [game]);
+
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  async function toggleWake() {
+    try {
+      if (wakeOn) {
+        if (wakeRef.current) { await wakeRef.current.release(); wakeRef.current = null; }
+        setWakeOn(false); showToast('Layar boleh mati lagi');
+      } else {
+        if (!('wakeLock' in navigator)) { showToast('Perangkat ini tidak mendukung layar tetap menyala'); return; }
+        wakeRef.current = await navigator.wakeLock.request('screen');
+        setWakeOn(true); showToast('Layar akan tetap menyala');
+      }
+    } catch (e) { showToast('Gagal mengatur layar'); }
+  }
+
+  function rollDice() {
+    if (rolling) return;
+    setRolling(true); buzz(20);
+    let n = 0;
+    const iv = setInterval(() => {
+      setDice([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
+      n += 1;
+      if (n > 12) {
+        clearInterval(iv);
+        setRolling(false);
+        buzz([15, 40, 15]);
+      }
+    }, 70);
+  }
+
+  function drawSeats() {
+    if (!game) return;
+    const shuffled = game.players.map((p) => ({ ...p })).sort(() => Math.random() - 0.5);
+    setGame({ ...game, players: shuffled, dealerIdx: 0, streak: 1 });
+    buzz([10, 30, 10]);
+    showToast('Tempat duduk diundi ulang');
+  }
+
+  useEffect(() => {
     const onResize = () => setVw(window.innerWidth);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  function buzz(ms) {
+    try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch (e) {}
+  }
 
   function showToast(msg) {
     const id = Date.now();
@@ -2410,17 +2481,23 @@ Balas HANYA JSON, tanpa markdown:
               const t = roundTally(i);
               return (
                 <div key={i} className={'mj-seat ' + SEAT_CLASS[i]}>
+                  {floaters.filter((f) => f.seat === i).map((f) => (
+                    <span key={f.id} className={'mj-floater' + (f.d > 0 ? ' up' : ' down')}>
+                      {f.d > 0 ? '+' : ''}{f.d}
+                    </span>
+                  ))}
                   <button className={'mj-player-card' + (i === game.dealerIdx ? ' is-dealer' : '')}
                     onClick={() => { setQuickPlayer(i); setAdjustAmt(''); setTransferTo(null); setTransferAmt(''); }}>
                     {i === game.dealerIdx && (
                       <span className="mj-dealer-crown"><Icon name="crown" size={13} /> 庄{game.streak > 1 ? `×${game.streak}` : ''}</span>
                     )}
                     <span className="mj-hu-btn" role="button" tabIndex={0}
-                      onClick={(e) => { e.stopPropagation(); openAddRound(undefined, i); }}
+                      onClick={(e) => { e.stopPropagation(); buzz(18); openAddRound(undefined, i); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openAddRound(undefined, i); } }}>和</span>
                     <Avatar name={p.name} size={vw >= 1100 ? 72 : vw >= 820 ? 60 : 44} wind={seatWindOf(i, game.dealerIdx)} dealer={i === game.dealerIdx} />
                     <span className="mj-player-name">{p.name}</span>
-                    <span className={'mj-player-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')}>
+                    <span className={'mj-player-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')
+                      + (floaters.some((f) => f.seat === i) ? ' bump' : '')}>
                       {p.score > 0 ? '+' : ''}{p.score}
                     </span>
                     {(t.flower > 0 || t.kongAn > 0 || t.kongMing > 0) && (
@@ -2439,7 +2516,7 @@ Balas HANYA JSON, tanpa markdown:
               <div className="mj-hub">
                 <div className="mj-hub-round">局 {game.round}</div>
                 <div className="mj-hub-wind">{WIND_GLYPH[game.roundWind || 0]}圈 · {WIND_NAME[game.roundWind || 0]}</div>
-                <button className="mj-btn primary mj-hub-btn" onClick={() => openAddRound()}>
+                <button className="mj-btn primary mj-hub-btn" onClick={() => { buzz(18); openAddRound(); }}>
                   <span className="mj-hu-glyph">和</span> Hu — Ada Menang
                 </button>
                 <button className="mj-btn ghost sm mj-hub-draw" onClick={() => { openAddRound(); setFormDraw(true); }}>
@@ -2512,6 +2589,12 @@ Balas HANYA JSON, tanpa markdown:
               ? `${(game.roundEvents || []).length} bonus tercatat ronde ini`
               : 'Tap pemain untuk catat bunga atau kong'} />
           <div className="mj-foot-actions">
+            <button className="mj-btn ghost sm" onClick={() => { setShowDice(true); rollDice(); }}>
+              <Icon name="dice" size={15} /> Lempar Dadu
+            </button>
+            <button className={'mj-btn ghost sm' + (wakeOn ? ' on' : '')} onClick={toggleWake}>
+              <Icon name="gear" size={15} /> {wakeOn ? 'Layar Nyala' : 'Jaga Layar'}
+            </button>
             {(game.roundEvents || []).length > 0 && (
               <button className="mj-btn ghost sm" onClick={() => undoBonusEvent(game.roundEvents[game.roundEvents.length - 1].id)}>
                 <Icon name="undo" size={15} /> Batal bonus
@@ -2525,6 +2608,33 @@ Balas HANYA JSON, tanpa markdown:
           </div>
         </div>
 
+        {showDice && (
+          <div className="mj-sheet-backdrop" onClick={() => setShowDice(false)}>
+            <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mj-sheet-handle" />
+              <div className="mj-sheet-title">Lempar Dadu</div>
+              <div className="mj-dice-area">
+                {dice.map((d, i) => (
+                  <div key={i} className={'mj-die' + (rolling ? ' rolling' : '')}>
+                    {Array.from({ length: 9 }).map((_, k) => (
+                      <span key={k} className={'mj-pip' + (DIE_PIPS[d].includes(k) ? ' on' : '')} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="mj-dice-total">{rolling ? '…' : dice[0] + dice[1]}</div>
+              <div className="mj-dice-hint">
+                {rolling ? 'Mengocok…' : `Hitung ${dice[0] + dice[1]} tempat berlawanan jarum jam dari banker untuk menentukan tembok yang dibongkar.`}
+              </div>
+              <button className="mj-btn primary" onClick={rollDice} disabled={rolling}>
+                <Icon name="dice" size={17} /> Lempar Lagi
+              </button>
+              <button className="mj-btn ghost" onClick={drawSeats}>Undi Ulang Tempat Duduk</button>
+              <button className="mj-btn ghost" onClick={() => setShowDice(false)}>Tutup</button>
+            </div>
+          </div>
+        )}
+
         {lastRecap && (() => {
           const e = lastRecap.entry;
           const names = lastRecap.players;
@@ -2532,6 +2642,13 @@ Balas HANYA JSON, tanpa markdown:
             <div className="mj-sheet-backdrop" onClick={() => setLastRecap(null)}>
               <div className="mj-sheet mj-recap-sheet" onClick={(ev) => ev.stopPropagation()}>
                 <div className="mj-sheet-handle" />
+                {!e.draw && (
+                  <div className="mj-confetti">
+                    {Array.from({ length: 14 }).map((_, i) => (
+                      <span key={i} className={'mj-confetti-bit c' + (i % 4)} style={{ left: (5 + i * 6.8) + '%', animationDelay: (i * 0.07) + 's' }} />
+                    ))}
+                  </div>
+                )}
                 <div className="mj-recap-top">
                   <Mascot mood="happy" small line={e.draw ? 'Ronde seri, lanjut lagi!' : `${names[e.winnerIdx]} menang ronde ini`} />
                 </div>
@@ -2598,17 +2715,17 @@ Balas HANYA JSON, tanpa markdown:
 
               <div className="mj-label">Catat Bonus (dibayar langsung)</div>
               <div className="mj-quick-grid">
-                <button className="mj-quick-btn flower" onClick={() => addBonusEvent(quickPlayer, 'flower')}>
+                <button className="mj-quick-btn flower" onClick={() => { buzz(14); addBonusEvent(quickPlayer, 'flower'); }}>
                   <Icon name="flower" size={26} />
                   <span className="mj-quick-label">花 Bunga</span>
                   <span className="mj-quick-val">+{(Number(game.flowerUnit) || 0) * 3}</span>
                 </button>
-                <button className="mj-quick-btn kong" onClick={() => addBonusEvent(quickPlayer, 'kongAn')}>
+                <button className="mj-quick-btn kong" onClick={() => { buzz(14); addBonusEvent(quickPlayer, 'kongAn'); }}>
                   <Icon name="tiles" size={26} />
                   <span className="mj-quick-label">暗槓 Tertutup</span>
                   <span className="mj-quick-val">+{(Number(game.kongUnit) || 0) * 6}</span>
                 </button>
-                <button className="mj-quick-btn kong" onClick={() => addBonusEvent(quickPlayer, 'kongMing')}>
+                <button className="mj-quick-btn kong" onClick={() => { buzz(14); addBonusEvent(quickPlayer, 'kongMing'); }}>
                   <Icon name="tiles" size={26} />
                   <span className="mj-quick-label">明槓 Terbuka</span>
                   <span className="mj-quick-val">+{(Number(game.kongUnit) || 0) * 3}</span>
@@ -2835,7 +2952,7 @@ Balas HANYA JSON, tanpa markdown:
 
                   <div className="mj-sheet-actions">
                     <button className="mj-btn ghost" onClick={() => setRoundStep(1)}>Kembali</button>
-                    <button className="mj-btn primary" onClick={confirmRound}>
+                    <button className="mj-btn primary" onClick={() => { buzz([12, 40, 12]); confirmRound(); }}>
                       <Icon name="check" size={17} /> Simpan Ronde
                     </button>
                   </div>
@@ -3095,7 +3212,7 @@ const CSS = `
 .seat-top{grid-area:top;} .seat-left{grid-area:left;} .seat-right{grid-area:right;}
 .seat-bottom{grid-area:bottom;} .seat-center{grid-area:center;}
 .mj-player-card{width:100%;background:rgba(243,236,218,0.94);color:var(--ink);border:none;border-radius:13px;
-  padding:9px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;
+  padding:9px 6px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;isolation:isolate;
   box-shadow:0 4px 0 rgba(0,0,0,0.32);cursor:pointer;transition:transform .06s ease, box-shadow .06s ease;}
 .mj-player-card:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,0.32);}
 .mj-player-card.is-dealer{background:linear-gradient(180deg,#fdf6e4,#f0e4c4);box-shadow:0 4px 0 rgba(0,0,0,0.32),0 0 0 2px var(--gold);}
@@ -3235,6 +3352,44 @@ const CSS = `
   .mj-side-title{font-size:15px;}
   .mj-side-name{font-size:14px;}
   .mj-side-score{font-size:16px;}
+}
+
+/* ---- animasi & interaksi ---- */
+@keyframes mj-float-up{0%{opacity:0;transform:translate(-50%,4px) scale(.8);}18%{opacity:1;transform:translate(-50%,-6px) scale(1.08);}
+  100%{opacity:0;transform:translate(-50%,-46px) scale(1);}}
+.mj-floater{position:absolute;left:50%;top:-4px;transform:translateX(-50%);z-index:6;pointer-events:none;
+  font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;animation:mj-float-up 1.4s ease-out forwards;
+  text-shadow:0 2px 8px rgba(0,0,0,0.6);}
+.mj-floater.up{color:#8fe0a8;} .mj-floater.down{color:#ff9c8d;}
+@keyframes mj-bump{0%{transform:scale(1);}30%{transform:scale(1.22);}100%{transform:scale(1);}}
+.mj-player-score.bump{animation:mj-bump .5s ease-out;}
+.mj-seat{position:relative;}
+.mj-btn.ghost.on{background:rgba(199,154,59,0.25);border-color:var(--gold);color:var(--gold);}
+
+/* ---- dadu ---- */
+.mj-dice-area{display:flex;gap:16px;justify-content:center;margin:8px 0 14px;}
+@keyframes mj-roll{0%{transform:rotate(0) translateY(0);}25%{transform:rotate(-18deg) translateY(-10px);}
+  50%{transform:rotate(14deg) translateY(0);}75%{transform:rotate(-8deg) translateY(-5px);}100%{transform:rotate(0) translateY(0);}}
+.mj-die{width:74px;height:74px;background:#f7f2e4;border-radius:14px;display:grid;grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(3,1fr);padding:10px;gap:3px;box-shadow:0 6px 0 rgba(0,0,0,0.35),inset 0 -3px 6px rgba(0,0,0,0.12);}
+.mj-die.rolling{animation:mj-roll .3s linear infinite;}
+.mj-pip{border-radius:50%;background:transparent;}
+.mj-pip.on{background:#b23a2e;}
+.mj-dice-total{text-align:center;font-family:'IBM Plex Mono',monospace;font-size:38px;font-weight:700;color:var(--gold);line-height:1;}
+.mj-dice-hint{text-align:center;font-size:12px;opacity:0.65;line-height:1.5;margin:8px 0 14px;}
+
+/* ---- confetti ---- */
+.mj-confetti{position:absolute;left:0;right:0;top:0;height:150px;overflow:hidden;pointer-events:none;border-radius:20px 20px 0 0;}
+@keyframes mj-fall{0%{opacity:0;transform:translateY(-16px) rotate(0);}12%{opacity:1;}
+  100%{opacity:0;transform:translateY(150px) rotate(420deg);}}
+.mj-confetti-bit{position:absolute;top:0;width:8px;height:12px;border-radius:2px;animation:mj-fall 1.9s ease-in forwards;}
+.mj-confetti-bit.c0{background:#c79a3b;} .mj-confetti-bit.c1{background:#b23a2e;}
+.mj-confetti-bit.c2{background:#5b8c69;} .mj-confetti-bit.c3{background:#f3ecda;}
+.mj-recap-sheet{position:relative;overflow:hidden;}
+
+@media (min-width:1180px){
+  .mj-floater{font-size:26px;}
+  .mj-die{width:92px;height:92px;}
 }
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
