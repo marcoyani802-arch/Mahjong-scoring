@@ -117,12 +117,13 @@ function tileLabel(code) {
   return `${n} ${TILE_NAME[s]}`;
 }
 
-function Tiles({ hand, size, onTileClick }) {
+function Tiles({ hand, size, onTileClick, flags }) {
   return (
     <div className={'mj-hand' + (size === 'sm' ? ' sm' : '')}>
       {hand.map((t, i) => (
-        <span key={i} className={'mj-tile-glyph' + (onTileClick ? ' clickable' : '')}
-          title={tileLabel(t)}
+        <span key={i}
+          className={'mj-tile-glyph' + (onTileClick ? ' clickable' : '') + (flags && flags.includes(i) ? ' unsure' : '')}
+          title={tileLabel(t) + (flags && flags.includes(i) ? ' — perlu dicek' : '')}
           onClick={onTileClick ? () => onTileClick(i) : undefined}>
           {TILE_GLYPH[t] || '?'}
         </span>
@@ -564,6 +565,8 @@ function MahjongApp() {
   const [scanStage, setScanStage] = useState('idle'); // idle | detecting | review | scoring | result
   const [scanTiles, setScanTiles] = useState([]);
   const [scanNotes, setScanNotes] = useState('');
+  const [scanUncertain, setScanUncertain] = useState([]);
+  const [scanEdited, setScanEdited] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [scanError, setScanError] = useState('');
   const [showTilePicker, setShowTilePicker] = useState(false);
@@ -791,6 +794,7 @@ function MahjongApp() {
   function resetScan() {
     setScanImage(null); setScanStage('idle'); setScanTiles([]); setScanNotes('');
     setScanResult(null); setScanError(''); setShowTilePicker(false); setShowFallback(false);
+    setScanUncertain([]); setScanEdited(false); setScanUncertain([]); setScanEdited(false);
     if (fileRef.current) fileRef.current.value = '';
   }
 
@@ -813,6 +817,13 @@ function MahjongApp() {
     reader.readAsDataURL(file);
   }
 
+  function editTiles(next) {
+    setScanTiles(next);
+    setScanEdited(true);
+    setScanUncertain([]);
+    setScanResult(null);
+  }
+
   function onPickFile(e) {
     loadImageFile(e.target.files && e.target.files[0]);
   }
@@ -830,18 +841,24 @@ function MahjongApp() {
 
   async function detectTiles(base64, mediaType) {
     setScanStage('detecting'); setScanError('');
-    const prompt = `Kamu membaca foto tangan mahjong. Identifikasi SETIAP ubin yang terlihat.
+    const prompt = `Baca foto ubin mahjong ini. Kerjakan bertahap dan teliti.
 
-Gunakan kode ini:
-- Characters/萬: 1m sampai 9m
-- Bamboo/索: 1s sampai 9s
-- Circles/筒: 1p sampai 9p
-- Angin: E (東), S (南), W (西), N (北)
-- Naga: RD (中 merah), GD (發 hijau), WD (白 kosong/putih)
-- Ubin bunga/musim: abaikan, jangan masukkan ke daftar, tapi hitung jumlahnya.
+CARA MEMBEDAKAN JENIS UBIN (paling sering tertukar):
+- 筒 Circles (p): motif LINGKARAN penuh seperti koin/donat, tersusun rapi. 1p satu lingkaran besar. 5p lima lingkaran pola X dengan tengah merah. 6p dua baris tiga. 8p dua baris empat. Warna campur merah/hijau/biru.
+- 索 Bamboo (s): motif BATANG memanjang bersegmen seperti ruas bambu, bukan lingkaran. 1s biasanya digambar burung. Dominan hijau, kadang merah.
+- 萬 Characters (m): ADA AKSARA 萬 besar di bagian bawah ubin dan angka Cina di atasnya. Kalau tidak ada aksara 萬, berarti bukan jenis ini.
+- Angin: aksara tunggal 東 南 西 北, biasanya biru/hitam.
+- Naga: 中 merah, 發 hijau, dan 白 yang berupa BINGKAI PERSEGI KOSONG tanpa isi.
 
-Balas HANYA JSON, tanpa markdown, tanpa penjelasan:
-{"readable": true/false, "tiles": ["1m","1m","2s"], "flowers": 0, "notes": "catatan singkat dalam Bahasa Indonesia tentang ubin yang buram atau tidak yakin"}
+ATURAN PENTING:
+- Kalau melihat lingkaran, itu 筒 (p), BUKAN 索 (s). Jangan tertukar.
+- Baca dari kiri ke kanan, satu per satu, jangan melompat.
+- Hanya baca ubin milik satu pemain yang menghadap kamera. Abaikan ubin di baris belakang yang menghadap pemain lain, ubin di tembok, dan ubin buangan di tengah meja.
+- Untuk tiap ubin beri "sure": true kalau kamu yakin, false kalau ragu. Lebih baik jujur ragu daripada menebak.
+- Ubin bunga/musim jangan dimasukkan ke daftar tiles.
+
+Balas HANYA JSON, tanpa markdown:
+{"readable": true, "tiles": [{"t":"3p","sure":true},{"t":"WD","sure":false}], "flowers": 0, "notes": "sebutkan ubin ke berapa yang kamu ragukan dan kenapa, Bahasa Indonesia, singkat"}
 
 Kalau foto tidak jelas atau bukan foto ubin mahjong, set readable=false dan jelaskan di notes.`;
     try {
@@ -860,8 +877,17 @@ Kalau foto tidak jelas atau bukan foto ubin mahjong, set readable=false dan jela
         setScanStage('idle');
         return;
       }
-      const valid = (parsed.tiles || []).filter((t) => ALL_TILES.includes(t));
-      setScanTiles(valid);
+      const codes = [];
+      const unsure = [];
+      (parsed.tiles || []).forEach((item) => {
+        const code = typeof item === 'string' ? item : (item && item.t);
+        if (!ALL_TILES.includes(code)) return;
+        if (typeof item !== 'string' && item.sure === false) unsure.push(codes.length);
+        codes.push(code);
+      });
+      setScanTiles(codes);
+      setScanUncertain(unsure);
+      setScanEdited(false);
       setScanNotes(parsed.notes || '');
       setScanStage('review');
     } catch (e) {
@@ -880,6 +906,7 @@ Kalau foto tidak jelas atau bukan foto ubin mahjong, set readable=false dan jela
 
 Tangan pemain (kode ubin): ${scanTiles.join(', ')}
 Jumlah ubin: ${scanTiles.length}
+Daftar ubin di atas sudah final dan diverifikasi pengguna. Hitung persis dari daftar ini saja.
 
 Daftar pola dan nilainya di ruleset ini:
 ${refList}
@@ -1616,7 +1643,7 @@ Balas HANYA JSON, tanpa markdown:
               <div className="mj-card">
                 <div className="mj-label">Dari Foto</div>
                 <div className="mj-fallback-text" style={{ marginBottom: 12 }}>
-                  Ambil foto tangan yang menang, ubinnya dibaca otomatis lalu bisa kamu koreksi sebelum dihitung.
+                  Preview ini jalan di dalam kotak pasir yang memblokir akses galeri, jadi tombol foto sering tidak bereaksi. Kalau begitu, pakai susun manual di atas — atau kirim fotonya langsung ke Claude di chat, nanti aku bacakan ubinnya.
                 </div>
                 <input id="mj-file-gallery" ref={fileRef} className="mj-file-input" type="file" accept="image/*" onChange={onPickFile} />
                 <label htmlFor="mj-file-gallery" className="mj-ghost-btn mj-file-label" style={{ marginTop: 0 }}>🖼 Coba Pilih dari Galeri</label>
@@ -1656,9 +1683,35 @@ Balas HANYA JSON, tanpa markdown:
                     : 'Tap ubin untuk hapus. Masukkan seluruh tangan termasuk ubin penutup.'}
                 </div>
                 {scanTiles.length === 0 && <div className="mj-empty">Belum ada ubin. Tap tombol di bawah untuk menambah.</div>}
-                <Tiles hand={scanTiles} onTileClick={(i) => setScanTiles(scanTiles.filter((_, x) => x !== i))} />
-                {scanNotes && <div className="mj-scan-note">Catatan: {scanNotes}</div>}
-                <button className="mj-ghost-btn" onClick={() => setShowTilePicker(true)}>+ Tambah ubin</button>
+                <Tiles hand={scanTiles} flags={scanUncertain} onTileClick={(i) => editTiles(scanTiles.filter((_, x) => x !== i))} />
+
+                {scanUncertain.length > 0 && (
+                  <div className="mj-unsure-legend">
+                    Ubin bergaris kuning: pembacaannya tidak yakin. Periksa dulu ubin-ubin itu.
+                  </div>
+                )}
+
+                {scanImage && scanNotes && !scanEdited && (
+                  <div className="mj-scan-note">Catatan pembacaan foto: {scanNotes}</div>
+                )}
+                {scanImage && scanEdited && (
+                  <div className="mj-scan-note edited">
+                    Kamu sudah mengoreksi ubinnya. Catatan pembacaan foto tadi tidak lagi berlaku — yang dihitung adalah daftar ubin di atas.
+                  </div>
+                )}
+
+                <div className="mj-tile-actions">
+                  <button className="mj-ghost-btn" style={{ marginTop: 0 }} onClick={() => setShowTilePicker(true)}>+ Tambah ubin</button>
+                  {scanTiles.length > 0 && (
+                    <button className="mj-ghost-btn" style={{ marginTop: 0 }} onClick={() => editTiles([])}>Kosongkan</button>
+                  )}
+                </div>
+                {scanImage && (
+                  <button className="mj-link-btn" style={{ marginTop: 8 }}
+                    onClick={() => detectTiles(scanImage.base64, scanImage.mediaType)}>
+                    ↻ Coba baca ulang foto
+                  </button>
+                )}
               </div>
               {scanError && <div className="mj-error-text" style={{ marginBottom: 10 }}>{scanError}</div>}
               <button className="mj-primary-btn" disabled={scanStage === 'scoring' || scanTiles.length === 0} onClick={scoreHand}>
@@ -1736,7 +1789,7 @@ Balas HANYA JSON, tanpa markdown:
                     <div className="mj-label">{TILE_NAME[s]}</div>
                     <div className="mj-picker-row">
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                        <button key={n} className="mj-picker-tile" onClick={() => setScanTiles([...scanTiles, `${n}${s}`])}>
+                        <button key={n} className="mj-picker-tile" onClick={() => editTiles([...scanTiles, `${n}${s}`])}>
                           {TILE_GLYPH[`${n}${s}`]}
                         </button>
                       ))}
@@ -1747,7 +1800,7 @@ Balas HANYA JSON, tanpa markdown:
                   <div className="mj-label">Angin & Naga</div>
                   <div className="mj-picker-row">
                     {HONOR_ORDER.map((h) => (
-                      <button key={h} className="mj-picker-tile" onClick={() => setScanTiles([...scanTiles, h])}>{TILE_GLYPH[h]}</button>
+                      <button key={h} className="mj-picker-tile" onClick={() => editTiles([...scanTiles, h])}>{TILE_GLYPH[h]}</button>
                     ))}
                   </div>
                 </div>
@@ -1811,7 +1864,7 @@ Balas HANYA JSON, tanpa markdown:
               <>
                 <div className="mj-demo-hint">
                   Fitur hitung poin otomatis memanggil API Anthropic. Ambil kunci di console.anthropic.com, lalu tempel di sini.
-                  Kunci disimpan hanya di HP ini dan tidak dikirim ke mana pun selain Anthropic. Jangan pakai kunci ini di halaman yang kamu bagikan ke publik.
+                  Kunci disimpan hanya di HP ini dan tidak dikirim ke mana pun selain Anthropic.
                 </div>
                 <div className="mj-onboard-name">
                   <input className="mj-text-input" type="password" placeholder="sk-ant-…" value={apiKeyInput}
@@ -2211,6 +2264,11 @@ const CSS = `
 .mj-spinner{font-family:'Noto Serif TC',serif;font-size:30px;background:var(--tile-ivory);color:var(--ink);width:50px;height:50px;border-radius:7px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;animation:mj-pulse 1.1s ease-in-out infinite;}
 .mj-scan-preview{width:100%;border-radius:12px;margin-bottom:14px;display:block;}
 .mj-scan-note{font-size:12px;opacity:0.65;background:rgba(199,154,59,0.12);border-left:2px solid var(--gold);padding:8px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.5;}
+.mj-scan-note.edited{background:rgba(91,140,105,0.15);border-left-color:var(--bamboo);opacity:0.9;}
+.mj-unsure-legend{font-size:11.5px;color:var(--gold);opacity:0.9;margin-top:6px;line-height:1.45;}
+.mj-tile-glyph.unsure{box-shadow:0 2px 0 rgba(0,0,0,0.3),0 0 0 2px var(--gold);}
+.mj-tile-actions{display:flex;gap:8px;margin-top:10px;}
+.mj-tile-actions .mj-ghost-btn{flex:1;}
 .mj-result-card{text-align:center;padding:24px 16px;border-color:var(--gold);}
 .mj-result-label{font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.6;margin-bottom:6px;}
 .mj-result-total{font-family:'IBM Plex Mono',monospace;font-size:48px;font-weight:700;color:var(--gold);line-height:1;}
