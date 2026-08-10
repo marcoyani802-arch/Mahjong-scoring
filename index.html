@@ -566,6 +566,10 @@ function MahjongApp() {
   const [scanTiles, setScanTiles] = useState([]);
   const [scanNotes, setScanNotes] = useState('');
   const [scanUncertain, setScanUncertain] = useState([]);
+  const [cropTop, setCropTop] = useState(0.62);
+  const [cropBottom, setCropBottom] = useState(1);
+  const [dragHandle, setDragHandle] = useState(null);
+  const cropRef = useRef(null);
   const [scanEdited, setScanEdited] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [scanError, setScanError] = useState('');
@@ -794,7 +798,7 @@ function MahjongApp() {
   function resetScan() {
     setScanImage(null); setScanStage('idle'); setScanTiles([]); setScanNotes('');
     setScanResult(null); setScanError(''); setShowTilePicker(false); setShowFallback(false);
-    setScanUncertain([]); setScanEdited(false); setScanUncertain([]); setScanEdited(false);
+    setScanUncertain([]); setScanEdited(false); setCropTop(0.62); setCropBottom(1); setDragHandle(null); setScanUncertain([]); setScanEdited(false);
     if (fileRef.current) fileRef.current.value = '';
   }
 
@@ -811,7 +815,8 @@ function MahjongApp() {
       const base64 = String(dataUrl).split(',')[1];
       const mediaType = file.type === 'image/jpg' ? 'image/jpeg' : file.type;
       setScanImage({ dataUrl, base64, mediaType });
-      detectTiles(base64, mediaType);
+      setCropTop(0.62); setCropBottom(1);
+      setScanStage('crop');
     };
     reader.onerror = () => setScanError('Gagal membaca file. Coba foto lain.');
     reader.readAsDataURL(file);
@@ -822,6 +827,46 @@ function MahjongApp() {
     setScanEdited(true);
     setScanUncertain([]);
     setScanResult(null);
+  }
+
+
+  function pointerFraction(e) {
+    const box = cropRef.current;
+    if (!box) return null;
+    const rect = box.getBoundingClientRect();
+    const clientY = e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY;
+    return Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+  }
+
+  function onCropMove(e) {
+    if (!dragHandle) return;
+    const f = pointerFraction(e);
+    if (f === null) return;
+    if (dragHandle === 'top') setCropTop(Math.min(f, cropBottom - 0.06));
+    else setCropBottom(Math.max(f, cropTop + 0.06));
+  }
+
+  async function cropAndDetect(useWhole) {
+    if (!scanImage) return;
+    if (useWhole) { detectTiles(scanImage.base64, scanImage.mediaType); return; }
+    try {
+      const img = new Image();
+      img.src = scanImage.dataUrl;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+      const sy = Math.round(img.naturalHeight * cropTop);
+      const sh = Math.max(1, Math.round(img.naturalHeight * (cropBottom - cropTop)));
+      const maxW = 1400;
+      const scale = Math.min(1, maxW / img.naturalWidth);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(sh * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, sy, img.naturalWidth, sh, 0, 0, canvas.width, canvas.height);
+      const cropped = canvas.toDataURL('image/jpeg', 0.92);
+      detectTiles(String(cropped).split(',')[1], 'image/jpeg');
+    } catch (err) {
+      detectTiles(scanImage.base64, scanImage.mediaType);
+    }
   }
 
   function onPickFile(e) {
@@ -841,7 +886,14 @@ function MahjongApp() {
 
   async function detectTiles(base64, mediaType) {
     setScanStage('detecting'); setScanError('');
+    const cfgS = MODES[scanMode];
+    const expect = cfgS.tilesInHand;
     const prompt = `Baca foto ubin mahjong ini. Kerjakan bertahap dan teliti.
+
+TARGET: satu barisan ubin milik SATU pemain, berdiri tegak menghadap kamera, tersusun berjajar rapi. Biasanya barisan paling bawah/paling depan di foto.
+JUMLAH YANG DIHARAPKAN: ${expect} atau ${expect + 1} ubin. Kalau kamu hanya menemukan jauh lebih sedikit, kemungkinan besar kamu melewatkan sebagian barisan — periksa lagi ujung kiri dan ujung kanan sampai habis, termasuk ubin yang letaknya agak terpisah dari kelompok utama.
+
+WAJIB DIABAIKAN: tumpukan ubin acak/tertelungkup di tengah meja, tembok ubin, ubin buangan, dan barisan milik pemain lain. Kalau di foto ada banyak ubin berserakan, itu BUKAN tangan pemain — jangan dibaca.
 
 CARA MEMBEDAKAN JENIS UBIN (paling sering tertukar):
 - 筒 Circles (p): motif LINGKARAN penuh seperti koin/donat, tersusun rapi. 1p satu lingkaran besar. 5p lima lingkaran pola X dengan tengah merah. 6p dua baris tiga. 8p dua baris empat. Warna campur merah/hijau/biru.
@@ -855,7 +907,9 @@ ATURAN PENTING:
 - Baca dari kiri ke kanan, satu per satu, jangan melompat.
 - Hanya baca ubin milik satu pemain yang menghadap kamera. Abaikan ubin di baris belakang yang menghadap pemain lain, ubin di tembok, dan ubin buangan di tengah meja.
 - Untuk tiap ubin beri "sure": true kalau kamu yakin, false kalau ragu. Lebih baik jujur ragu daripada menebak.
-- Ubin bunga/musim jangan dimasukkan ke daftar tiles.
+- Ubin bunga/musim jangan dimasukkan ke daftar tiles, hitung saja jumlahnya di field flowers.
+- Jangan menggabungkan ubin kembar. Kalau ada tiga 東 berjajar, tulis tiga entri terpisah.
+- Hitung dulu jumlah ubin di barisan itu sebelum membacanya satu per satu, lalu pastikan panjang array tiles sama dengan hitunganmu.
 
 Balas HANYA JSON, tanpa markdown:
 {"readable": true, "tiles": [{"t":"3p","sure":true},{"t":"WD","sure":false}], "flowers": 0, "notes": "sebutkan ubin ke berapa yang kamu ragukan dan kenapa, Bahasa Indonesia, singkat"}
@@ -863,7 +917,7 @@ Balas HANYA JSON, tanpa markdown:
 Kalau foto tidak jelas atau bukan foto ubin mahjong, set readable=false dan jelaskan di notes.`;
     try {
       const data = await callClaude({
-        model: MODEL, max_tokens: 1000,
+        model: MODEL, max_tokens: 1500,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
           { type: 'text', text: prompt },
@@ -1662,6 +1716,37 @@ Balas HANYA JSON, tanpa markdown:
             </>
           )}
 
+          {scanStage === 'crop' && scanImage && (
+            <>
+              <div className="mj-card">
+                <div className="mj-label">Tandai barisan tanganmu</div>
+                <div className="mj-hint-text" style={{ textAlign: 'left', marginTop: 0, marginBottom: 10 }}>
+                  Geser garis atas dan bawah supaya hanya barisan ubinmu yang masuk kotak. Tumpukan ubin di tengah meja jangan ikut — itu yang bikin pembacaan meleset.
+                </div>
+                <div className="mj-crop-wrap" ref={cropRef}
+                  onMouseMove={onCropMove} onTouchMove={onCropMove}
+                  onMouseUp={() => setDragHandle(null)} onTouchEnd={() => setDragHandle(null)}
+                  onMouseLeave={() => setDragHandle(null)}>
+                  <img src={scanImage.dataUrl} alt="Foto tangan" className="mj-crop-img" draggable="false" />
+                  <div className="mj-crop-shade" style={{ top: 0, height: (cropTop * 100) + '%' }} />
+                  <div className="mj-crop-shade" style={{ top: (cropBottom * 100) + '%', bottom: 0 }} />
+                  <div className="mj-crop-band" style={{ top: (cropTop * 100) + '%', height: ((cropBottom - cropTop) * 100) + '%' }} />
+                  <div className="mj-crop-handle" style={{ top: (cropTop * 100) + '%' }}
+                    onMouseDown={() => setDragHandle('top')} onTouchStart={() => setDragHandle('top')}>
+                    <span className="mj-crop-grip" />
+                  </div>
+                  <div className="mj-crop-handle" style={{ top: (cropBottom * 100) + '%' }}
+                    onMouseDown={() => setDragHandle('bottom')} onTouchStart={() => setDragHandle('bottom')}>
+                    <span className="mj-crop-grip" />
+                  </div>
+                </div>
+              </div>
+              <button className="mj-primary-btn" onClick={() => cropAndDetect(false)}>Baca Area Ini</button>
+              <button className="mj-ghost-btn" onClick={() => cropAndDetect(true)}>Baca seluruh foto</button>
+              <button className="mj-ghost-btn" onClick={resetScan}>Ganti foto</button>
+            </>
+          )}
+
           {scanStage === 'detecting' && (
             <div className="mj-card mj-loading-card">
               <div className="mj-spinner">麻</div>
@@ -1684,6 +1769,14 @@ Balas HANYA JSON, tanpa markdown:
                 </div>
                 {scanTiles.length === 0 && <div className="mj-empty">Belum ada ubin. Tap tombol di bawah untuk menambah.</div>}
                 <Tiles hand={scanTiles} flags={scanUncertain} onTileClick={(i) => editTiles(scanTiles.filter((_, x) => x !== i))} />
+
+                {scanImage && !scanEdited && scanTiles.length > 0
+                  && scanTiles.length !== cfg.tilesInHand && scanTiles.length !== cfg.tilesInHand + 1 && (
+                  <div className="mj-count-warn">
+                    Terbaca {scanTiles.length} ubin, padahal aturan {cfg.short} memakai {cfg.tilesInHand} atau {cfg.tilesInHand + 1}.
+                    Kemungkinan sebagian barisan terlewat. Coba baca ulang dengan area yang lebih pas, atau tambahkan sisanya manual.
+                  </div>
+                )}
 
                 {scanUncertain.length > 0 && (
                   <div className="mj-unsure-legend">
@@ -2263,6 +2356,13 @@ const CSS = `
 .mj-loading-card{text-align:center;padding:30px 18px;font-size:13.5px;opacity:0.85;}
 .mj-spinner{font-family:'Noto Serif TC',serif;font-size:30px;background:var(--tile-ivory);color:var(--ink);width:50px;height:50px;border-radius:7px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;animation:mj-pulse 1.1s ease-in-out infinite;}
 .mj-scan-preview{width:100%;border-radius:12px;margin-bottom:14px;display:block;}
+.mj-crop-wrap{position:relative;width:100%;border-radius:10px;overflow:hidden;touch-action:none;user-select:none;}
+.mj-crop-img{width:100%;display:block;pointer-events:none;}
+.mj-crop-shade{position:absolute;left:0;right:0;background:rgba(8,42,34,0.72);pointer-events:none;}
+.mj-crop-band{position:absolute;left:0;right:0;border:2px solid var(--gold);pointer-events:none;box-sizing:border-box;}
+.mj-crop-handle{position:absolute;left:0;right:0;height:44px;margin-top:-22px;display:flex;align-items:center;justify-content:center;cursor:row-resize;touch-action:none;}
+.mj-crop-grip{width:64px;height:8px;border-radius:5px;background:var(--gold);box-shadow:0 1px 4px rgba(0,0,0,0.5);}
+.mj-count-warn{background:rgba(178,58,46,0.18);border:1px solid var(--seal-red);color:#ffb4a8;font-size:12px;line-height:1.5;padding:9px 11px;border-radius:8px;margin-top:8px;}
 .mj-scan-note{font-size:12px;opacity:0.65;background:rgba(199,154,59,0.12);border-left:2px solid var(--gold);padding:8px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.5;}
 .mj-scan-note.edited{background:rgba(91,140,105,0.15);border-left-color:var(--bamboo);opacity:0.9;}
 .mj-unsure-legend{font-size:11.5px;color:var(--gold);opacity:0.9;margin-top:6px;line-height:1.45;}
