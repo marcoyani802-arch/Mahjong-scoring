@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#082a22"/>
+  <rect x="96" y="72" width="320" height="368" rx="40" fill="#f3ecda"/>
+  <text x="256" y="330" font-size="230" text-anchor="middle" fill="#b23a2e" font-family="serif" font-weight="bold">麻</text>
+</svg>

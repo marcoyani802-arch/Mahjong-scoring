@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mahjong Table Score</title>
+<meta name="theme-color" content="#082a22" />
+<link rel="manifest" href="manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Mahjong" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='%23f3ecda'/><text x='32' y='46' font-size='40' text-anchor='middle' fill='%231c1a15' font-family='serif'>%E9%BA%BB</text></svg>" />
+<style>
+  html,body{margin:0;padding:0;background:#082a22;}
+  #root{min-height:100vh;}
+  .boot{min-height:100vh;display:flex;align-items:center;justify-content:center;color:#f3ecda;font-family:system-ui,sans-serif;font-size:14px;}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" crossorigin></script>
+</head>
+<body>
+<div id="root"><div class="boot">Memuat…</div></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+/* ===== Penyimpanan lokal: pengganti window.storage milik Claude ===== */
+const LS_PREFIX = 'mjts:';
+window.storage = {
+  async get(key, shared) {
+    const v = localStorage.getItem(LS_PREFIX + (shared ? 's:' : 'p:') + key);
+    if (v === null) return null;
+    return { key, value: v, shared: !!shared };
+  },
+  async set(key, value, shared) {
+    localStorage.setItem(LS_PREFIX + (shared ? 's:' : 'p:') + key, value);
+    return { key, value, shared: !!shared };
+  },
+  async delete(key, shared) {
+    localStorage.removeItem(LS_PREFIX + (shared ? 's:' : 'p:') + key);
+    return { key, deleted: true, shared: !!shared };
+  },
+  async list(prefix, shared) {
+    const head = LS_PREFIX + (shared ? 's:' : 'p:') + (prefix || '');
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(head)) keys.push(k.slice((LS_PREFIX + (shared ? 's:' : 'p:')).length));
+    }
+    return { keys, prefix, shared: !!shared };
+  },
+};
+
+/* ===== Panggilan API Claude pakai kunci milik pengguna sendiri ===== */
+const MODEL = 'claude-sonnet-4-6';
+const API_KEY_STORE = 'mjts:apikey';
+function getApiKey() { return localStorage.getItem(API_KEY_STORE) || ''; }
+function setApiKeyStored(k) { if (k) localStorage.setItem(API_KEY_STORE, k); else localStorage.removeItem(API_KEY_STORE); }
+
+async function callClaude(body) {
+  const key = getApiKey();
+  if (!key) throw new Error('Belum ada API key. Isi dulu di halaman Profil.');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = (j.error && j.error.message) || ''; } catch (e) {}
+    if (res.status === 401) throw new Error('API key ditolak. Cek lagi kuncinya di Profil.');
+    if (res.status === 429) throw new Error('Kena batas pemakaian API. Tunggu sebentar lalu coba lagi.');
+    throw new Error('Gagal memanggil API (' + res.status + '). ' + detail);
+  }
+  return res.json();
+}
+
+/* ============================ RULESETS ============================ */
+const MODES = {
+  hongkong: { label: 'Hong Kong', short: '港式', unit: 'Fan', startingScore: 750, presets: [1, 2, 3, 4, 5, 6, 8, 10], limit: 13, tilesInHand: 13 },
+  singapore: { label: 'Singapore', short: '新加坡', unit: 'Tai', startingScore: 0, presets: [1, 2, 3, 4, 5, 6, 8, 10], limit: 5, tilesInHand: 13 },
+  taiwanese: { label: 'Taiwanese', short: '台式 16張', unit: 'Tai', startingScore: 0, presets: [2, 3, 4, 5, 6, 8, 10, 16], limit: 16, tilesInHand: 16 },
+  custom: { label: 'Custom', short: '自訂', unit: 'Points', startingScore: 0, presets: [1, 2, 3, 4, 5, 6, 8, 10], limit: null, tilesInHand: 13 },
+};
+
+/* ============================ TILES ============================ */
+const TILE_GLYPH = {
+  '1m': '\u{1F007}', '2m': '\u{1F008}', '3m': '\u{1F009}', '4m': '\u{1F00A}', '5m': '\u{1F00B}',
+  '6m': '\u{1F00C}', '7m': '\u{1F00D}', '8m': '\u{1F00E}', '9m': '\u{1F00F}',
+  '1s': '\u{1F010}', '2s': '\u{1F011}', '3s': '\u{1F012}', '4s': '\u{1F013}', '5s': '\u{1F014}',
+  '6s': '\u{1F015}', '7s': '\u{1F016}', '8s': '\u{1F017}', '9s': '\u{1F018}',
+  '1p': '\u{1F019}', '2p': '\u{1F01A}', '3p': '\u{1F01B}', '4p': '\u{1F01C}', '5p': '\u{1F01D}',
+  '6p': '\u{1F01E}', '7p': '\u{1F01F}', '8p': '\u{1F020}', '9p': '\u{1F021}',
+  'E': '\u{1F000}', 'S': '\u{1F001}', 'W': '\u{1F002}', 'N': '\u{1F003}',
+  'RD': '\u{1F004}', 'GD': '\u{1F005}', 'WD': '\u{1F006}',
+};
+const TILE_NAME = {
+  m: '萬 Characters', s: '索 Bamboo', p: '筒 Circles',
+  E: '東 East', S: '南 South', W: '西 West', N: '北 North',
+  RD: '中 Red Dragon', GD: '發 Green Dragon', WD: '白 White Dragon',
+};
+const SUIT_ORDER = ['m', 's', 'p'];
+const HONOR_ORDER = ['E', 'S', 'W', 'N', 'RD', 'GD', 'WD'];
+const ALL_TILES = [
+  ...SUIT_ORDER.flatMap((s) => [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `${n}${s}`)),
+  ...HONOR_ORDER,
+];
+function tileLabel(code) {
+  if (TILE_NAME[code]) return TILE_NAME[code];
+  const n = code[0], s = code[1];
+  return `${n} ${TILE_NAME[s]}`;
+}
+
+function Tiles({ hand, size, onTileClick }) {
+  return (
+    <div className={'mj-hand' + (size === 'sm' ? ' sm' : '')}>
+      {hand.map((t, i) => (
+        <span key={i} className={'mj-tile-glyph' + (onTileClick ? ' clickable' : '')}
+          title={tileLabel(t)}
+          onClick={onTileClick ? () => onTileClick(i) : undefined}>
+          {TILE_GLYPH[t] || '?'}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ============================ GUIDEBOOK DATA ============================ */
+const CATEGORIES = [
+  { id: 'dasar', label: 'Dasar' },
+  { id: 'warna', label: 'Satu Warna' },
+  { id: 'set', label: 'Pola Set' },
+  { id: 'honor', label: 'Naga & Angin' },
+  { id: 'limit', label: 'Tangan Besar' },
+];
+
+const PATTERNS = [
+  {
+    id: 'pinghu', cn: '平和', en: 'All Sequences', cat: 'dasar',
+    values: { hongkong: 1, singapore: 1, taiwanese: 2 },
+    desc: 'Semua set berupa urutan (chow), tanpa satu pun triplet. Pasangannya bukan naga atau angin yang bernilai.',
+    tips: 'Pola paling dasar dan paling sering keluar. Nilainya kecil tapi gampang dikejar kalau tangan awal kamu banyak ubin berurutan.',
+    example: ['2m', '3m', '4m', '5m', '6m', '7m', '3p', '4p', '5p', '6s', '7s', '8s', '9p', '9p'],
+  },
+  {
+    id: 'menqian', cn: '門前清', en: 'Concealed Hand', cat: 'dasar',
+    values: { hongkong: 1, singapore: 1, taiwanese: 1 },
+    desc: 'Menang tanpa pernah mengambil ubin buangan lawan (tanpa pong/chow terbuka).',
+    tips: 'Tahan diri jangan buru-buru pong. Di Taiwan, 門清 + 自摸 sering dihitung bertumpuk jadi lebih besar.',
+    example: ['1p', '1p', '1p', '4s', '5s', '6s', '7m', '8m', '9m', '2p', '3p', '4p', 'GD', 'GD'],
+  },
+  {
+    id: 'zimo', cn: '自摸', en: 'Self-Draw', cat: 'dasar',
+    values: { hongkong: 1, singapore: 1, taiwanese: 1 },
+    desc: 'Menyelesaikan tangan dengan ubin yang kamu tarik sendiri dari tembok, bukan dari buangan lawan.',
+    tips: 'Bedanya bukan cuma poin — waktu self-draw, ketiga lawan bayar. Kalau menang dari buangan, cuma yang buang yang bayar (tergantung aturan meja).',
+    example: ['3s', '3s', '3s', '5p', '6p', '7p', '2m', '3m', '4m', '8s', '8s', '8s', 'E', 'E'],
+  },
+  {
+    id: 'huayi', cn: '混一色', en: 'Half Flush', cat: 'warna',
+    values: { hongkong: 3, singapore: 2, taiwanese: 4 },
+    desc: 'Semua ubin dari satu jenis warna saja, boleh dicampur naga dan angin.',
+    tips: 'Kalau tangan awal condong ke satu warna, ini target yang realistis. Lawan biasanya bisa baca dari buanganmu, jadi hati-hati.',
+    example: ['1p', '2p', '3p', '5p', '6p', '7p', '9p', '9p', '9p', 'RD', 'RD', 'RD', 'S', 'S'],
+  },
+  {
+    id: 'qingyi', cn: '清一色', en: 'Full Flush', cat: 'warna',
+    values: { hongkong: 7, singapore: 4, taiwanese: 8 },
+    desc: 'Seluruh tangan dari satu warna saja, tanpa naga maupun angin sama sekali.',
+    tips: 'Salah satu pola bernilai tinggi yang masih bisa dikejar. Butuh komitmen sejak awal — buang semua warna lain cepat-cepat.',
+    example: ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '2s', '2s', '2s', '5s', '5s'],
+  },
+  {
+    id: 'duiduihu', cn: '對對和', en: 'All Pungs', cat: 'set',
+    values: { hongkong: 3, singapore: 2, taiwanese: 4 },
+    desc: 'Semua set berupa triplet (pong) atau kong, plus satu pasang. Tidak ada urutan sama sekali.',
+    tips: 'Cocok kalau tangan awal kamu banyak pasangan. Boleh pong terbuka, jadi lebih cepat jadi dibanding pola tertutup.',
+    example: ['4m', '4m', '4m', '7p', '7p', '7p', '2s', '2s', '2s', 'W', 'W', 'W', '9m', '9m'],
+  },
+  {
+    id: 'sianke', cn: '四暗刻', en: 'Four Concealed Pungs', cat: 'limit',
+    values: { hongkong: 13, singapore: 5, taiwanese: 8 },
+    desc: 'Empat triplet yang semuanya terbentuk tanpa mengambil buangan lawan.',
+    tips: 'Sangat sulit. Kalau kamu sudah punya tiga triplet tertutup, sabar jangan pong yang keempat — pong terbuka membatalkan polanya.',
+    example: ['3m', '3m', '3m', '6p', '6p', '6p', '8s', '8s', '8s', 'N', 'N', 'N', '5p', '5p'],
+  },
+  {
+    id: 'dragonpung', cn: '番牌 (三元)', en: 'Dragon Pung', cat: 'honor',
+    values: { hongkong: 1, singapore: 1, taiwanese: 1 },
+    desc: 'Satu triplet naga (中 merah, 發 hijau, atau 白 putih). Dihitung per triplet.',
+    tips: 'Nilai kecil tapi hampir gratis. Kalau kamu pegang dua ubin naga sejak awal, biasanya layak ditahan.',
+    example: ['RD', 'RD', 'RD', '2m', '3m', '4m', '5s', '6s', '7s', '3p', '4p', '5p', '8p', '8p'],
+  },
+  {
+    id: 'seatwind', cn: '門風 / 圈風', en: 'Seat & Round Wind', cat: 'honor',
+    values: { hongkong: 1, singapore: 1, taiwanese: 1 },
+    desc: 'Triplet angin yang sesuai posisi duduk kamu, atau sesuai angin putaran yang sedang berjalan.',
+    tips: 'Kalau anginmu kebetulan sama dengan angin putaran, triplet itu dihitung dua kali. Angin yang tidak cocok tidak bernilai.',
+    example: ['E', 'E', 'E', '1m', '2m', '3m', '6p', '7p', '8p', '4s', '5s', '6s', '2p', '2p'],
+  },
+  {
+    id: 'xiaosanyuan', cn: '小三元', en: 'Small Three Dragons', cat: 'honor',
+    values: { hongkong: 5, singapore: 3, taiwanese: 4 },
+    desc: 'Dua triplet naga lengkap, plus sepasang naga jenis ketiga.',
+    tips: 'Sering jadi batu loncatan ke 大三元. Kalau sudah dua triplet naga di meja, lawan pasti menahan naga ketiga — siap-siap ubinnya tidak keluar.',
+    example: ['RD', 'RD', 'RD', 'GD', 'GD', 'GD', 'WD', 'WD', '2s', '3s', '4s', '7p', '8p', '9p'],
+  },
+  {
+    id: 'dasanyuan', cn: '大三元', en: 'Big Three Dragons', cat: 'limit',
+    values: { hongkong: 8, singapore: 5, taiwanese: 8 },
+    desc: 'Ketiga jenis naga lengkap sebagai triplet semua.',
+    tips: 'Tangan besar klasik. Di banyak meja ada aturan tanggung jawab: pemain yang membuang naga ketiga ke tangan terbuka menanggung bayaran semua.',
+    example: ['RD', 'RD', 'RD', 'GD', 'GD', 'GD', 'WD', 'WD', 'WD', '4m', '5m', '6m', '8s', '8s'],
+  },
+  {
+    id: 'xiaosixi', cn: '小四喜', en: 'Small Four Winds', cat: 'limit',
+    values: { hongkong: 8, singapore: 5, taiwanese: 8 },
+    desc: 'Tiga triplet angin, plus sepasang angin jenis keempat.',
+    tips: 'Butuh banyak ubin kehormatan sejak awal. Kalau di tangan awal sudah ada dua pasang angin, baru pertimbangkan.',
+    example: ['E', 'E', 'E', 'S', 'S', 'S', 'W', 'W', 'W', 'N', 'N', '3p', '4p', '5p'],
+  },
+  {
+    id: 'dasixi', cn: '大四喜', en: 'Big Four Winds', cat: 'limit',
+    values: { hongkong: 13, singapore: 5, taiwanese: 16 },
+    desc: 'Keempat angin lengkap sebagai triplet semua, plus satu pasang bebas.',
+    tips: 'Salah satu tangan paling langka. Hampir selalu dihitung nilai maksimum di meja mana pun.',
+    example: ['E', 'E', 'E', 'S', 'S', 'S', 'W', 'W', 'W', 'N', 'N', 'N', '6p', '6p'],
+  },
+  {
+    id: 'ziyise', cn: '字一色', en: 'All Honors', cat: 'limit',
+    values: { hongkong: 10, singapore: 5, taiwanese: 16 },
+    desc: 'Seluruh tangan hanya terdiri dari naga dan angin, tanpa satu pun ubin bernomor.',
+    tips: 'Otomatis juga All Pungs. Sangat jarang karena tiap jenis kehormatan cuma ada 4 buah di seluruh set.',
+    example: ['E', 'E', 'E', 'W', 'W', 'W', 'RD', 'RD', 'RD', 'GD', 'GD', 'GD', 'WD', 'WD'],
+  },
+  {
+    id: 'qingyaojiu', cn: '清么九', en: 'All Terminals', cat: 'limit',
+    values: { hongkong: 13, singapore: 5, taiwanese: 16 },
+    desc: 'Semua set terdiri dari ubin angka 1 dan 9 saja, tanpa naga, angin, atau angka tengah.',
+    tips: 'Kalau ada campuran naga/angin, namanya 混么九 (Mixed Terminals) dan nilainya lebih rendah.',
+    example: ['1m', '1m', '1m', '9m', '9m', '9m', '1p', '1p', '1p', '9s', '9s', '9s', '1s', '1s'],
+  },
+  {
+    id: 'shisanyao', cn: '十三么', en: 'Thirteen Orphans', cat: 'limit',
+    values: { hongkong: 13, singapore: 5 },
+    desc: 'Satu dari tiap ubin terminal (1 dan 9 di ketiga warna) dan tiap ubin kehormatan, ditambah satu duplikat sebagai pasangan.',
+    tips: 'Tidak berlaku di aturan Taiwan 16 ubin. Keputusannya harus diambil sejak tangan awal — sekali komit, hampir mustahil balik ke pola normal.',
+    example: ['1m', '9m', '1s', '9s', '1p', '9p', 'E', 'S', 'W', 'N', 'RD', 'GD', 'WD', 'WD'],
+  },
+  {
+    id: 'jiulianbaodeng', cn: '九蓮寶燈', en: 'Nine Gates', cat: 'limit',
+    values: { hongkong: 13, singapore: 5 },
+    desc: 'Tangan tertutup satu warna dengan pola 1112345678999, plus satu ubin tambahan dari warna yang sama.',
+    tips: 'Tangan paling terkenal di mahjong. Harus sepenuhnya tertutup — satu pong terbuka saja langsung batal.',
+    example: ['1s', '1s', '1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '9s', '9s', '5s'],
+  },
+  {
+    id: 'flowers', cn: '花牌', en: 'Flower Tiles', cat: 'dasar',
+    values: { hongkong: 1, singapore: 1, taiwanese: 1 },
+    desc: 'Ubin bunga dan musim yang sesuai posisi dudukmu. Dihitung per ubin, di luar 13/16 ubin tangan.',
+    tips: 'Bunga langsung dibuka dan diganti ubin baru. Di Singapura ada tambahan ubin hewan; di Taiwan, mengumpulkan kedelapan bunga (八仙過海) bernilai besar.',
+    example: [],
+  },
+];
+
+/* ============================ PLAYER ROSTER ============================ */
+const PLAYER_ROSTER = [
+  'Pi Xiang', 'Marco', 'Aling', 'Carlo', 'Cindy',
+  'Merilyn', 'Juni Yeoh', 'Aseng', 'Eddy Brian', 'Annie Thie',
+];
+
+/* ============================ DEMO DATA ============================ */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildDemoData() {
+  const rnd = mulberry32(20260810);
+  const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const modeKeys = ['hongkong', 'singapore', 'taiwanese', 'hongkong', 'singapore', 'hongkong', 'taiwanese', 'hongkong'];
+  const dayOffsets = [1, 2, 3, 5, 6, 9, 14, 19];
+  const records = [];
+
+  modeKeys.forEach((modeKey, gi) => {
+    const cfg = MODES[modeKey];
+    const pool = [...PLAYER_ROSTER].sort(() => rnd() - 0.5).slice(0, 4);
+    const g = {
+      mode: modeKey, dealerIdx: 0, streak: 1, dealerDoubles: true, dealerKeepsSeat: true,
+      startingScore: cfg.startingScore,
+    };
+    const scores = [cfg.startingScore, cfg.startingScore, cfg.startingScore, cfg.startingScore];
+    const rounds = [];
+    const nRounds = 6 + Math.floor(rnd() * 5);
+
+    for (let r = 1; r <= nRounds; r++) {
+      const isDraw = rnd() < 0.12;
+      const deltas = [0, 0, 0, 0];
+      let winnerIdx = null, method = null, discarderIdx = null, value = 0;
+      if (!isDraw) {
+        winnerIdx = Math.floor(rnd() * 4);
+        method = rnd() < 0.42 ? 'selfdraw' : 'discard';
+        if (method === 'discard') {
+          const opts = [0, 1, 2, 3].filter((i) => i !== winnerIdx);
+          discarderIdx = pick(opts);
+        }
+        value = pick(cfg.presets.slice(0, 6));
+        const payers = method === 'selfdraw' ? [0, 1, 2, 3].filter((i) => i !== winnerIdx) : [discarderIdx];
+        payers.forEach((p) => {
+          let amt = value;
+          if (winnerIdx === g.dealerIdx || p === g.dealerIdx) amt *= 2;
+          deltas[p] -= amt; deltas[winnerIdx] += amt;
+        });
+      }
+      deltas.forEach((d, i) => { scores[i] += d; });
+      rounds.unshift({
+        id: gi * 1000 + r, roundNum: r, draw: isDraw, winnerIdx, method, discarderIdx,
+        value, dealerIdx: g.dealerIdx, deltas,
+      });
+      if (!isDraw) {
+        if (winnerIdx === g.dealerIdx) g.streak += 1;
+        else { g.dealerIdx = (g.dealerIdx + 1) % 4; g.streak = 1; }
+      }
+    }
+
+    records.push({
+      id: 900000 + gi, demo: true, code: 'DEMO' + (gi + 1), mode: modeKey,
+      date: new Date(Date.now() - dayOffsets[gi] * 86400000).toISOString(),
+      players: pool.map((n, i) => ({ name: n, net: scores[i] - cfg.startingScore, final: scores[i] })),
+      rounds,
+    });
+  });
+
+  // aggregate stats
+  const statsMap = {};
+  records.forEach((rec) => {
+    const maxNet = Math.max(...rec.players.map((p) => p.net));
+    rec.players.forEach((p) => {
+      const key = p.name.trim().toLowerCase();
+      const prev = statsMap[key] || { name: p.name, gamesPlayed: 0, totalPoints: 0, wins: 0 };
+      statsMap[key] = {
+        name: p.name, gamesPlayed: prev.gamesPlayed + 1,
+        totalPoints: prev.totalPoints + p.net, wins: prev.wins + (p.net === maxNet ? 1 : 0),
+      };
+    });
+  });
+
+  // an in-progress demo game
+  const cfg = MODES.hongkong;
+  const livePlayers = ['Marco', 'Pi Xiang', 'Aling', 'Carlo'];
+  const liveScores = [cfg.startingScore, cfg.startingScore, cfg.startingScore, cfg.startingScore];
+  const liveRounds = [];
+  let dIdx = 0, strk = 1;
+  const scripted = [
+    { w: 0, m: 'selfdraw', d: null, v: 3 },
+    { w: 2, m: 'discard', d: 1, v: 4 },
+    { w: 2, m: 'selfdraw', d: null, v: 1 },
+    { draw: true },
+    { w: 1, m: 'discard', d: 3, v: 6 },
+  ];
+  scripted.forEach((s, i) => {
+    const deltas = [0, 0, 0, 0];
+    if (!s.draw) {
+      const payers = s.m === 'selfdraw' ? [0, 1, 2, 3].filter((x) => x !== s.w) : [s.d];
+      payers.forEach((p) => {
+        let amt = s.v;
+        if (s.w === dIdx || p === dIdx) amt *= 2;
+        deltas[p] -= amt; deltas[s.w] += amt;
+      });
+    }
+    deltas.forEach((d, x) => { liveScores[x] += d; });
+    liveRounds.unshift({
+      id: 990000 + i, roundNum: i + 1, draw: !!s.draw, winnerIdx: s.draw ? null : s.w,
+      method: s.draw ? null : s.m, discarderIdx: s.draw ? null : s.d, value: s.draw ? 0 : s.v,
+      dealerIdx: dIdx, deltas,
+    });
+    if (!s.draw) {
+      if (s.w === dIdx) strk += 1; else { dIdx = (dIdx + 1) % 4; strk = 1; }
+    }
+  });
+
+  const activeGame = {
+    demo: true, code: 'DEMO0', isHost: true, mode: 'hongkong', unit: cfg.unit,
+    players: livePlayers.map((n, i) => ({ name: n, score: liveScores[i] })),
+    startingScore: cfg.startingScore, dealerIdx: dIdx, streak: strk,
+    round: scripted.length + 1, dealerDoubles: true, dealerKeepsSeat: true, history: liveRounds,
+  };
+
+  return { records, statsMap, activeGame };
+}
+
+/* ============================ APP ============================ */
+const ACTIVE_KEY = 'mahjong-active-game-v2';
+const BACKUP_KEY = 'mahjong-predemo-backup-v2';
+const STATS_KEY = 'mahjong-player-stats-v2';
+const HISTORY_KEY = 'mahjong-game-history-v2';
+const PROFILE_KEY = 'mahjong-profile-v2';
+const SEAT_CLASS = ['seat-bottom', 'seat-right', 'seat-top', 'seat-left'];
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function genCode() {
+  let c = '';
+  for (let i = 0; i < 5; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  return c;
+}
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch (e) { return ''; }
+}
+
+function MahjongApp() {
+  const [view, setView] = useState('loading');
+  const [toast, setToast] = useState(null);
+
+  const [profile, setProfile] = useState(null);
+  const [profileNameInput, setProfileNameInput] = useState('');
+  const [stats, setStats] = useState({});
+  const [history, setHistory] = useState([]);
+  const [game, setGame] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const [mode, setMode] = useState('hongkong');
+  const [playerNames, setPlayerNames] = useState(['', '', '', '']);
+  const [startingScore, setStartingScore] = useState(MODES.hongkong.startingScore);
+  const [dealerDoubles, setDealerDoubles] = useState(true);
+  const [dealerKeepsSeat, setDealerKeepsSeat] = useState(true);
+
+  const [activeSlot, setActiveSlot] = useState(0);
+  const [demoOn, setDemoOn] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState('');
+  const [lbFilter, setLbFilter] = useState('all');
+  const [expandedGame, setExpandedGame] = useState(null);
+
+  const [showAddRound, setShowAddRound] = useState(false);
+  const [showHistorySheet, setShowHistorySheet] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(null);
+  const [formDraw, setFormDraw] = useState(false);
+  const [formWinner, setFormWinner] = useState(null);
+  const [formMethod, setFormMethod] = useState('selfdraw');
+  const [formDiscarder, setFormDiscarder] = useState(null);
+  const [formValue, setFormValue] = useState('');
+
+  // guidebook
+  const [guideMode, setGuideMode] = useState('hongkong');
+  const [guideCat, setGuideCat] = useState('all');
+  const [openPattern, setOpenPattern] = useState(null);
+  const [quizOn, setQuizOn] = useState(false);
+  const [quizQ, setQuizQ] = useState(null);
+  const [quizPicked, setQuizPicked] = useState(null);
+  const [quizScore, setQuizScore] = useState({ right: 0, total: 0 });
+
+  // scanner
+  const [scanMode, setScanMode] = useState('hongkong');
+  const [scanImage, setScanImage] = useState(null);
+  const [scanStage, setScanStage] = useState('idle'); // idle | detecting | review | scoring | result
+  const [scanTiles, setScanTiles] = useState([]);
+  const [scanNotes, setScanNotes] = useState('');
+  const [scanResult, setScanResult] = useState(null);
+  const [scanError, setScanError] = useState('');
+  const [showTilePicker, setShowTilePicker] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeySaved, setApiKeySaved] = useState(getApiKey());
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      const safeGet = async (key, shared) => {
+        try { const r = await window.storage.get(key, shared); return r ? r.value : null; } catch (e) { return null; }
+      };
+      const [p, s, h, a] = await Promise.all([
+        safeGet(PROFILE_KEY, false), safeGet(STATS_KEY, false), safeGet(HISTORY_KEY, false), safeGet(ACTIVE_KEY, false),
+      ]);
+      if (p) { try { setProfile(JSON.parse(p)); } catch (e) {} }
+      if (s) { try { setStats(JSON.parse(s)); } catch (e) {} }
+      if (h) { try { const hh = JSON.parse(h); setHistory(hh); setDemoOn(hh.some((x) => x.demo)); } catch (e) {} }
+      if (a) { try { const g = JSON.parse(a); setGame(g); setGuideMode(g.mode); setScanMode(g.mode); setView('playing'); } catch (e) { setView('home'); } }
+      else setView('home');
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => { if (loaded && game) { (async () => {
+    try { await window.storage.set(ACTIVE_KEY, JSON.stringify(game), false); } catch (e) {}
+    if (game.code) { try { await window.storage.set('mj-code-' + game.code, JSON.stringify(game), true); } catch (e) {} }
+  })(); } }, [game, loaded]);
+  useEffect(() => { if (loaded) (async () => { try { await window.storage.set(STATS_KEY, JSON.stringify(stats), false); } catch (e) {} })(); }, [stats, loaded]);
+  useEffect(() => { if (loaded) (async () => { try { await window.storage.set(HISTORY_KEY, JSON.stringify(history), false); } catch (e) {} })(); }, [history, loaded]);
+  useEffect(() => { if (loaded && profile) (async () => { try { await window.storage.set(PROFILE_KEY, JSON.stringify(profile), false); } catch (e) {} })(); }, [profile, loaded]);
+
+  function showToast(msg) {
+    const id = Date.now();
+    setToast({ id, msg });
+    setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 2400);
+  }
+  function goHome() { setView('home'); }
+  function saveProfileName() {
+    const n = profileNameInput.trim();
+    if (!n) return;
+    setProfile({ name: n }); setProfileNameInput('');
+  }
+  function onModeChange(m) { setMode(m); setStartingScore(MODES[m].startingScore); }
+
+  function assignSlot(name) {
+    const arr = [...playerNames];
+    arr[activeSlot] = name;
+    setPlayerNames(arr);
+    setActiveSlot((s) => (s + 1) % 4);
+  }
+  function randomizeRoster() {
+    const shuffled = [...PLAYER_ROSTER].sort(() => Math.random() - 0.5).slice(0, 4);
+    setPlayerNames(shuffled);
+    setActiveSlot(0);
+  }
+
+  async function loadDemo() {
+    try {
+      await window.storage.set(BACKUP_KEY, JSON.stringify({ stats, history }), false);
+    } catch (e) {}
+    const { records, statsMap, activeGame } = buildDemoData();
+    const mergedStats = { ...stats };
+    Object.entries(statsMap).forEach(([k, v]) => {
+      const prev = mergedStats[k];
+      mergedStats[k] = prev
+        ? { name: v.name, gamesPlayed: prev.gamesPlayed + v.gamesPlayed, totalPoints: prev.totalPoints + v.totalPoints, wins: prev.wins + v.wins }
+        : v;
+    });
+    setStats(mergedStats);
+    setHistory([...records, ...history].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 40));
+    if (!game) { setGame(activeGame); setGuideMode('hongkong'); setScanMode('hongkong'); }
+    setDemoOn(true);
+    setView('home');
+    showToast('Data demo dimuat — 8 game selesai + 1 berjalan');
+  }
+
+  async function clearDemo() {
+    let restored = null;
+    try {
+      const r = await window.storage.get(BACKUP_KEY, false);
+      if (r && r.value) restored = JSON.parse(r.value);
+    } catch (e) {}
+    if (restored) { setStats(restored.stats || {}); setHistory(restored.history || []); }
+    else { setHistory(history.filter((h) => !h.demo)); setStats({}); }
+    if (game && game.demo) {
+      if (game.code) { try { await window.storage.delete('mj-code-' + game.code, true); } catch (e) {} }
+      try { await window.storage.delete(ACTIVE_KEY, false); } catch (e) {}
+      setGame(null);
+    }
+    try { await window.storage.delete(BACKUP_KEY, false); } catch (e) {}
+    setDemoOn(false);
+    showToast('Data demo dihapus');
+  }
+
+  function hostGame() {
+    const names = playerNames.map((n, i) => n.trim() || `Player ${i + 1}`);
+    const cfg = MODES[mode];
+    setGame({
+      code: genCode(), isHost: true, mode, unit: cfg.unit,
+      players: names.map((n) => ({ name: n, score: Number(startingScore) || 0 })),
+      startingScore: Number(startingScore) || 0,
+      dealerIdx: 0, streak: 1, round: 1, dealerDoubles, dealerKeepsSeat, history: [],
+    });
+    setGuideMode(mode); setScanMode(mode);
+    setView('playing');
+  }
+
+  async function joinGame() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code) return;
+    setJoinError('');
+    try {
+      const r = await window.storage.get('mj-code-' + code, true);
+      if (r && r.value) {
+        const parsed = JSON.parse(r.value);
+        setGame({ ...parsed, isHost: false }); setGuideMode(parsed.mode); setScanMode(parsed.mode);
+        setView('playing'); setJoinCode('');
+      } else setJoinError('Kode tidak ditemukan. Cek lagi kodenya, atau game sudah selesai.');
+    } catch (e) { setJoinError('Kode tidak ditemukan. Cek lagi kodenya, atau game sudah selesai.'); }
+  }
+
+  async function refreshShared() {
+    if (!game || !game.code) return;
+    try {
+      const r = await window.storage.get('mj-code-' + game.code, true);
+      if (r && r.value) { setGame({ ...JSON.parse(r.value), isHost: game.isHost }); showToast('Skor diperbarui'); }
+    } catch (e) { showToast('Gagal refresh'); }
+  }
+
+  function computeDeltas(g, winnerIdx, method, discarderIdx, value) {
+    const deltas = [0, 0, 0, 0];
+    if (winnerIdx === null) return deltas;
+    const payers = method === 'selfdraw' ? [0, 1, 2, 3].filter((i) => i !== winnerIdx) : [discarderIdx];
+    payers.forEach((p) => {
+      let amt = value;
+      if (g.dealerDoubles && (winnerIdx === g.dealerIdx || p === g.dealerIdx)) amt *= 2;
+      deltas[p] -= amt; deltas[winnerIdx] += amt;
+    });
+    return deltas;
+  }
+
+  function openAddRound(prefillValue) {
+    setFormDraw(false); setFormWinner(null); setFormMethod('selfdraw'); setFormDiscarder(null);
+    setFormValue(prefillValue !== undefined ? String(prefillValue) : '');
+    setShowAddRound(true);
+  }
+
+  function confirmRound() {
+    if (!game) return;
+    let deltas = [0, 0, 0, 0];
+    let winnerIdx = null, method = null, discarderIdx = null, value = 0;
+    if (!formDraw) {
+      if (formWinner === null) return;
+      value = Number(formValue);
+      if (!value || value <= 0) return;
+      if (formMethod === 'discard' && formDiscarder === null) return;
+      winnerIdx = formWinner; method = formMethod; discarderIdx = formDiscarder;
+      deltas = computeDeltas(game, winnerIdx, method, discarderIdx, value);
+    }
+    const newPlayers = game.players.map((p, i) => ({ ...p, score: p.score + deltas[i] }));
+    let newDealerIdx = game.dealerIdx, newStreak = game.streak;
+    if (!formDraw) {
+      if (winnerIdx === game.dealerIdx) {
+        if (game.dealerKeepsSeat) newStreak = game.streak + 1;
+        else { newDealerIdx = (game.dealerIdx + 1) % 4; newStreak = 1; }
+      } else { newDealerIdx = (game.dealerIdx + 1) % 4; newStreak = 1; }
+    }
+    const entry = { id: Date.now(), roundNum: game.round, draw: formDraw, winnerIdx, method, discarderIdx, value, dealerIdx: game.dealerIdx, deltas };
+    setGame({ ...game, players: newPlayers, dealerIdx: newDealerIdx, streak: newStreak, round: game.round + 1, history: [entry, ...game.history] });
+    setShowAddRound(false);
+  }
+
+  function undoLast() {
+    if (!game || game.history.length === 0) return;
+    const [last, ...rest] = game.history;
+    const reverted = game.players.map((p, i) => ({ ...p, score: p.score - last.deltas[i] }));
+    setGame({ ...game, players: reverted, dealerIdx: last.dealerIdx, round: game.round - 1, history: rest });
+  }
+
+  function finishGame(save) {
+    if (!game) return;
+    if (save) {
+      const netChanges = game.players.map((p) => p.score - game.startingScore);
+      const maxNet = Math.max(...netChanges);
+      const newStats = { ...stats };
+      game.players.forEach((p, i) => {
+        const key = p.name.trim().toLowerCase();
+        const prev = newStats[key] || { name: p.name, gamesPlayed: 0, totalPoints: 0, wins: 0 };
+        newStats[key] = {
+          name: p.name, gamesPlayed: prev.gamesPlayed + 1, totalPoints: prev.totalPoints + netChanges[i],
+          wins: prev.wins + (netChanges[i] === maxNet ? 1 : 0),
+        };
+      });
+      setStats(newStats);
+      setHistory([{
+        id: Date.now(), code: game.code, mode: game.mode, date: new Date().toISOString(),
+        players: game.players.map((p, i) => ({ name: p.name, net: netChanges[i], final: p.score })),
+        rounds: game.history,
+      }, ...history].slice(0, 40));
+    }
+    if (game.code) (async () => { try { await window.storage.delete('mj-code-' + game.code, true); } catch (e) {} })();
+    (async () => { try { await window.storage.delete(ACTIVE_KEY, false); } catch (e) {} })();
+    setGame(null); setShowSettings(false); setConfirmEnd(null); setView('home');
+    showToast(save ? 'Game tersimpan ke statistik' : 'Game dibatalkan');
+  }
+
+  /* -------------------- QUIZ -------------------- */
+  function newQuiz() {
+    const pool = PATTERNS.filter((p) => p.example.length > 0 && p.values[guideMode] !== undefined);
+    if (pool.length < 4) { showToast('Belum cukup pola untuk ruleset ini'); return; }
+    const answer = pool[Math.floor(Math.random() * pool.length)];
+    const distractors = pool.filter((p) => p.id !== answer.id).sort(() => Math.random() - 0.5).slice(0, 3);
+    const options = [answer, ...distractors].sort(() => Math.random() - 0.5);
+    setQuizQ({ answer, options }); setQuizPicked(null); setQuizOn(true);
+  }
+  function pickQuiz(id) {
+    if (quizPicked) return;
+    setQuizPicked(id);
+    setQuizScore((s) => ({ right: s.right + (id === quizQ.answer.id ? 1 : 0), total: s.total + 1 }));
+  }
+
+  /* -------------------- SCANNER -------------------- */
+  function resetScan() {
+    setScanImage(null); setScanStage('idle'); setScanTiles([]); setScanNotes('');
+    setScanResult(null); setScanError(''); setShowTilePicker(false); setShowFallback(false);
+    if (fileRef.current) fileRef.current.value = '';
+  }
+
+  function loadImageFile(file) {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      setScanError('File itu bukan gambar. Pilih foto berformat JPG atau PNG.');
+      return;
+    }
+    setScanError('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const base64 = String(dataUrl).split(',')[1];
+      const mediaType = file.type === 'image/jpg' ? 'image/jpeg' : file.type;
+      setScanImage({ dataUrl, base64, mediaType });
+      detectTiles(base64, mediaType);
+    };
+    reader.onerror = () => setScanError('Gagal membaca file. Coba foto lain.');
+    reader.readAsDataURL(file);
+  }
+
+  function onPickFile(e) {
+    loadImageFile(e.target.files && e.target.files[0]);
+  }
+
+  function onPasteImage(e) {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.startsWith('image/')) {
+        loadImageFile(items[i].getAsFile());
+        e.preventDefault();
+        return;
+      }
+    }
+  }
+
+  async function detectTiles(base64, mediaType) {
+    setScanStage('detecting'); setScanError('');
+    const prompt = `Kamu membaca foto tangan mahjong. Identifikasi SETIAP ubin yang terlihat.
+
+Gunakan kode ini:
+- Characters/萬: 1m sampai 9m
+- Bamboo/索: 1s sampai 9s
+- Circles/筒: 1p sampai 9p
+- Angin: E (東), S (南), W (西), N (北)
+- Naga: RD (中 merah), GD (發 hijau), WD (白 kosong/putih)
+- Ubin bunga/musim: abaikan, jangan masukkan ke daftar, tapi hitung jumlahnya.
+
+Balas HANYA JSON, tanpa markdown, tanpa penjelasan:
+{"readable": true/false, "tiles": ["1m","1m","2s"], "flowers": 0, "notes": "catatan singkat dalam Bahasa Indonesia tentang ubin yang buram atau tidak yakin"}
+
+Kalau foto tidak jelas atau bukan foto ubin mahjong, set readable=false dan jelaskan di notes.`;
+    try {
+      const data = await callClaude({
+        model: MODEL, max_tokens: 1000,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: prompt },
+        ] }],
+      });
+      const text = data.content.map((i) => i.text || '').join('\n');
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      if (!parsed.readable) {
+        setScanError(parsed.notes || 'Foto tidak terbaca. Coba ambil ulang dengan cahaya lebih terang dan ubin sejajar.');
+        setScanStage('idle');
+        return;
+      }
+      const valid = (parsed.tiles || []).filter((t) => ALL_TILES.includes(t));
+      setScanTiles(valid);
+      setScanNotes(parsed.notes || '');
+      setScanStage('review');
+    } catch (e) {
+      setScanError(String(e.message || e));
+      setScanStage('idle');
+    }
+  }
+
+  async function scoreHand() {
+    if (scanTiles.length === 0) return;
+    setScanStage('scoring'); setScanError('');
+    const cfg = MODES[scanMode];
+    const refList = PATTERNS.filter((p) => p.values[scanMode] !== undefined)
+      .map((p) => `- ${p.cn} (${p.en}): ${p.values[scanMode]} ${cfg.unit}`).join('\n');
+    const prompt = `Kamu penghitung poin mahjong untuk aturan ${cfg.label} (${cfg.short}). Satuan nilai: ${cfg.unit}.
+
+Tangan pemain (kode ubin): ${scanTiles.join(', ')}
+Jumlah ubin: ${scanTiles.length}
+
+Daftar pola dan nilainya di ruleset ini:
+${refList}
+
+Tugas:
+1. Cek apakah tangan ini valid (bisa dipecah jadi set + satu pasang). Untuk ${cfg.label}, tangan lengkap biasanya ${cfg.tilesInHand + 1} ubin termasuk ubin penutup.
+2. Kalau valid, tentukan pola apa saja yang berlaku dan jumlahkan nilainya.
+3. Jangan mengarang pola yang tidak ada di daftar. Kalau ada pola di luar daftar yang kamu kenali, sebutkan di caveats bukan di patterns.
+${cfg.limit ? `4. Batas maksimum di ruleset ini ${cfg.limit} ${cfg.unit}. Kalau total melebihi, set total ke ${cfg.limit} dan sebutkan di caveats.` : ''}
+
+Balas HANYA JSON, tanpa markdown:
+{"valid": true/false, "total": 0, "patterns": [{"cn":"對對和","en":"All Pungs","value":3,"why":"alasan singkat Bahasa Indonesia"}], "breakdown": "cara tangan dipecah, contoh: 111m / 234s / 555p / EEE / 9p9p", "caveats": "hal yang perlu dicek manual, Bahasa Indonesia, boleh kosong"}`;
+    try {
+      const data = await callClaude({ model: MODEL, max_tokens: 1000, messages: [{ role: 'user', content: prompt }] });
+      const text = data.content.map((i) => i.text || '').join('\n');
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      setScanResult(parsed);
+      setScanStage('result');
+    } catch (e) {
+      setScanError(String(e.message || e));
+      setScanStage('review');
+    }
+  }
+
+  function useScannedValue() {
+    if (!scanResult || !game) return;
+    setView('playing');
+    openAddRound(scanResult.total);
+    showToast(`Nilai ${scanResult.total} ${MODES[scanMode].unit} dimasukkan`);
+  }
+
+  /* -------------------- SHARED RENDER -------------------- */
+  if (view === 'loading') {
+    return (<div className="mj-root mj-loading"><style>{CSS}</style><div className="mj-loading-tile">麻</div></div>);
+  }
+
+  const myKey = profile ? profile.name.trim().toLowerCase() : null;
+  const myStats = myKey ? stats[myKey] : null;
+  const statsArr = Object.values(stats);
+
+  function weeklyStats() {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const map = {};
+    history.filter((h) => new Date(h.date).getTime() >= cutoff).forEach((h) => {
+      h.players.forEach((p) => {
+        const key = p.name.trim().toLowerCase();
+        if (!map[key]) map[key] = { name: p.name, gamesPlayed: 0, totalPoints: 0, wins: 0 };
+        map[key].gamesPlayed += 1; map[key].totalPoints += p.net;
+      });
+    });
+    return Object.values(map);
+  }
+  const leaderboardData = (lbFilter === 'all' ? statsArr : weeklyStats()).sort((a, b) => b.totalPoints - a.totalPoints);
+
+  function renderNav(active) {
+    return (
+      <div className="mj-nav">
+        <button className={'mj-nav-item' + (active === 'leaderboard' ? ' active' : '')} onClick={() => setView('leaderboard')}>
+          <span className="mj-nav-icon">榜</span>Papan</button>
+        <button className={'mj-nav-item' + (active === 'history' ? ' active' : '')} onClick={() => setView('history')}>
+          <span className="mj-nav-icon">局</span>Riwayat</button>
+        <button className={'mj-nav-item mj-nav-home' + (active === 'home' ? ' active' : '')} onClick={() => setView('home')}>
+          <span className="mj-nav-icon">⌂</span>Home</button>
+        <button className={'mj-nav-item' + (active === 'guide' ? ' active' : '')} onClick={() => setView('guide')}>
+          <span className="mj-nav-icon">書</span>Panduan</button>
+        <button className={'mj-nav-item' + (active === 'profile' ? ' active' : '')} onClick={() => setView('profile')}>
+          <span className="mj-nav-icon">人</span>Profil</button>
+      </div>
+    );
+  }
+  const renderToast = () => (toast ? <div className="mj-toast">{toast.msg}</div> : null);
+
+  /* -------------------- HOME -------------------- */
+  if (view === 'home') {
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <div className="mj-hero">
+            <div className="mj-hero-glyph">麻雀</div>
+            <div className="mj-hero-title">Table Score</div>
+            <div className="mj-hero-sub">Host, catat, dan pantau skor mahjong meja kamu</div>
+          </div>
+
+          {game && (
+            <div className="mj-card mj-continue-card" onClick={() => setView('playing')}>
+              <div>
+                <div className="mj-continue-title">Game sedang berlangsung</div>
+                <div className="mj-continue-sub">Kode {game.code} · 局 {game.round}</div>
+              </div>
+              <div className="mj-continue-arrow">→</div>
+            </div>
+          )}
+
+          <button className="mj-primary-btn" onClick={() => setView('host')}>⛩ Host a Game</button>
+          <button className="mj-ghost-btn" onClick={() => setView('join')}>⌗ Join with Code</button>
+          <button className="mj-ghost-btn mj-scan-cta" onClick={() => { resetScan(); setView('scan'); }}>
+            📷 Scan Kartu Tangan
+          </button>
+
+          <div className="mj-card" style={{ marginTop: 14 }}>
+            <div className="mj-row-between">
+              <div className="mj-label" style={{ marginBottom: 0 }}>Your Stats</div>
+              <button className="mj-link-btn" style={{ padding: 0 }} onClick={() => setView('profile')}>Lihat Profil</button>
+            </div>
+            {!profile ? (
+              <div className="mj-onboard-name">
+                <input className="mj-text-input" placeholder="Nama kamu di game" value={profileNameInput}
+                  onChange={(e) => setProfileNameInput(e.target.value)} />
+                <button className="mj-mini-btn" onClick={saveProfileName}>Simpan</button>
+              </div>
+            ) : (
+              <div className="mj-stat-grid">
+                <div className="mj-stat-box"><div className="mj-stat-label">Games</div><div className="mj-stat-value">{myStats ? myStats.gamesPlayed : 0}</div></div>
+                <div className="mj-stat-box">
+                  <div className="mj-stat-label">Acc. Point</div>
+                  <div className={'mj-stat-value' + (myStats && myStats.totalPoints < 0 ? ' negative' : myStats && myStats.totalPoints > 0 ? ' positive' : '')}>
+                    {myStats ? (myStats.totalPoints > 0 ? '+' : '') + myStats.totalPoints : 0}
+                  </div>
+                </div>
+                <div className="mj-stat-box">
+                  <div className="mj-stat-label">Avg / Game</div>
+                  {myStats && myStats.gamesPlayed >= 5
+                    ? <div className="mj-stat-value">{Math.round(myStats.totalPoints / myStats.gamesPlayed)}</div>
+                    : <div className="mj-stat-locked">🔒 5 game</div>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mj-card">
+            <div className="mj-row-between">
+              <div className="mj-label" style={{ marginBottom: 0 }}>Leaderboard</div>
+              <button className="mj-link-btn" style={{ padding: 0 }} onClick={() => setView('leaderboard')}>Lihat Semua</button>
+            </div>
+            <div className="mj-lb-preview">
+              {leaderboardData.length === 0 && (
+                <div className="mj-empty-demo">
+                  <div className="mj-empty">Belum ada data. Selesaikan satu game dulu —</div>
+                  <button className="mj-mini-btn mj-demo-btn" onClick={loadDemo}>🎴 atau muat data demo</button>
+                </div>
+              )}
+              {leaderboardData.slice(0, 4).map((p, i) => (
+                <div key={p.name + i} className="mj-lb-row">
+                  <span className="mj-lb-rank">{i + 1}</span>
+                  <span className="mj-lb-name">{p.name}</span>
+                  <span className={'mj-lb-points' + (p.totalPoints < 0 ? ' negative' : ' positive')}>
+                    {p.totalPoints > 0 ? '+' : ''}{p.totalPoints}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {renderNav('home')}
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- HOST -------------------- */
+  if (view === 'host') {
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <button className="mj-back-btn" onClick={goHome}>← Home</button>
+          <div className="mj-page-title">Host a Game</div>
+          <div className="mj-card">
+            <div className="mj-label">Ruleset</div>
+            <div className="mj-mode-grid">
+              {Object.entries(MODES).map(([key, m]) => (
+                <button key={key} className={'mj-mode-chip' + (mode === key ? ' active' : '')} onClick={() => onModeChange(key)}>
+                  <span className="mj-mode-cn">{m.short}</span><span className="mj-mode-en">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mj-card">
+            <div className="mj-row-between">
+              <div className="mj-label" style={{ marginBottom: 0 }}>Pemain (4 orang)</div>
+              <button className="mj-link-btn" style={{ padding: 0 }} onClick={randomizeRoster}>Acak dari daftar</button>
+            </div>
+            <div className="mj-hint-text" style={{ textAlign: 'left', marginTop: 0, marginBottom: 10 }}>
+              Tap kursi lalu pilih nama, atau ketik langsung.
+            </div>
+            <div className="mj-players-input">
+              {playerNames.map((n, i) => (
+                <div key={i} className={'mj-slot' + (activeSlot === i ? ' active' : '')} onClick={() => setActiveSlot(i)}>
+                  <span className="mj-slot-seat">{['東', '南', '西', '北'][i]}</span>
+                  <input className="mj-slot-input" placeholder={`Kursi ${i + 1}`} value={n} maxLength={16}
+                    onFocus={() => setActiveSlot(i)}
+                    onChange={(e) => { const arr = [...playerNames]; arr[i] = e.target.value; setPlayerNames(arr); }} />
+                  {n && <button className="mj-slot-clear" onClick={(e) => { e.stopPropagation(); const arr = [...playerNames]; arr[i] = ''; setPlayerNames(arr); }}>×</button>}
+                </div>
+              ))}
+            </div>
+            <div className="mj-label" style={{ marginTop: 14 }}>Daftar Pemain</div>
+            <div className="mj-roster-row">
+              {PLAYER_ROSTER.map((name) => {
+                const used = playerNames.includes(name);
+                return (
+                  <button key={name} className={'mj-roster-chip' + (used ? ' used' : '')} onClick={() => assignSlot(name)}>
+                    {name}{used && <span className="mj-roster-check"> ✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="mj-card">
+            <div className="mj-row-between">
+              <div className="mj-label" style={{ marginBottom: 0 }}>Starting score</div>
+              <input className="mj-number-input" type="number" value={startingScore} onChange={(e) => setStartingScore(e.target.value)} />
+            </div>
+            <div className="mj-settings" style={{ marginTop: 12 }}>
+              <label className="mj-toggle-row"><span>Banker (庄) bayar/terima dobel</span>
+                <input type="checkbox" checked={dealerDoubles} onChange={(e) => setDealerDoubles(e.target.checked)} /></label>
+              <label className="mj-toggle-row"><span>Banker tetap jika menang</span>
+                <input type="checkbox" checked={dealerKeepsSeat} onChange={(e) => setDealerKeepsSeat(e.target.checked)} /></label>
+            </div>
+          </div>
+          <button className="mj-primary-btn" onClick={hostGame}>Buat Kode & Mulai</button>
+        </div>
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- JOIN -------------------- */
+  if (view === 'join') {
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <button className="mj-back-btn" onClick={goHome}>← Home</button>
+          <div className="mj-page-title">Join with Code</div>
+          <div className="mj-card">
+            <div className="mj-label">Masukkan kode game</div>
+            <input className="mj-text-input mj-code-input" placeholder="ABCDE" value={joinCode} maxLength={5}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())} />
+            {joinError && <div className="mj-error-text">{joinError}</div>}
+            <button className="mj-primary-btn" style={{ marginTop: 12 }} onClick={joinGame}>Gabung</button>
+            <div className="mj-hint-text">Minta kode 5 karakter dari yang host game.</div>
+          </div>
+        </div>
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- LEADERBOARD -------------------- */
+  if (view === 'leaderboard') {
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <div className="mj-page-title">Leaderboard</div>
+          <div className="mj-segmented" style={{ marginBottom: 16 }}>
+            <button className={lbFilter === 'all' ? 'active' : ''} onClick={() => setLbFilter('all')}>Semua Waktu</button>
+            <button className={lbFilter === 'week' ? 'active' : ''} onClick={() => setLbFilter('week')}>Minggu Ini</button>
+          </div>
+          <div className="mj-card">
+            {leaderboardData.length === 0 && <div className="mj-empty">Belum ada data untuk periode ini.</div>}
+            {leaderboardData.map((p, i) => (
+              <div key={p.name + i} className="mj-lb-row mj-lb-row-full">
+                <span className={'mj-lb-rank' + (i < 3 ? ' medal medal-' + i : '')}>{i + 1}</span>
+                <div className="mj-lb-info">
+                  <span className="mj-lb-name">{p.name}</span>
+                  <span className="mj-lb-sub">{p.gamesPlayed} game · {p.wins || 0} menang</span>
+                </div>
+                <span className={'mj-lb-points' + (p.totalPoints < 0 ? ' negative' : ' positive')}>
+                  {p.totalPoints > 0 ? '+' : ''}{p.totalPoints}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {renderNav('leaderboard')}
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- HISTORY -------------------- */
+  if (view === 'history') {
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <div className="mj-page-title">Riwayat Game</div>
+          {history.length === 0 && <div className="mj-card"><div className="mj-empty">Belum ada game selesai.</div></div>}
+          {history.map((h) => {
+            const cfg = MODES[h.mode] || MODES.custom;
+            const isOpen = expandedGame === h.id;
+            const sorted = [...h.players].sort((a, b) => b.net - a.net);
+            return (
+              <div key={h.id} className="mj-card mj-history-card">
+                <div className="mj-history-card-head" onClick={() => setExpandedGame(isOpen ? null : h.id)}>
+                  <div>
+                    <div className="mj-history-card-title">{cfg.short} · {fmtDate(h.date)}</div>
+                    <div className="mj-history-card-sub">Kode {h.code} · {h.rounds.length} ronde</div>
+                  </div>
+                  <div className="mj-history-card-toggle">{isOpen ? '−' : '+'}</div>
+                </div>
+                <div className="mj-history-standings">
+                  {sorted.map((p, i) => (
+                    <div key={p.name + i} className="mj-lb-row">
+                      <span className="mj-lb-rank">{i + 1}</span>
+                      <span className="mj-lb-name">{p.name}</span>
+                      <span className={'mj-lb-points' + (p.net < 0 ? ' negative' : ' positive')}>{p.net > 0 ? '+' : ''}{p.net}</span>
+                    </div>
+                  ))}
+                </div>
+                {isOpen && (
+                  <div className="mj-history-rounds">
+                    {h.rounds.slice().reverse().map((r) => (
+                      <div key={r.id} className="mj-history-row">
+                        <div className="mj-history-round">局{r.roundNum}</div>
+                        <div className="mj-history-desc">
+                          {r.draw ? 'Seri (流局)' : `${h.players[r.winnerIdx].name} menang · ${r.method === 'selfdraw' ? '自摸' : `放炮 dari ${h.players[r.discarderIdx].name}`} · ${r.value} ${cfg.unit}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {renderNav('history')}
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- GUIDEBOOK -------------------- */
+  if (view === 'guide') {
+    const cfg = MODES[guideMode];
+    const list = PATTERNS.filter((p) => guideCat === 'all' || p.cat === guideCat);
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <div className="mj-page-title">Panduan Pola</div>
+
+          <div className="mj-mode-grid" style={{ marginBottom: 12 }}>
+            {Object.entries(MODES).filter(([k]) => k !== 'custom').map(([key, m]) => (
+              <button key={key} className={'mj-mode-chip' + (guideMode === key ? ' active' : '')} onClick={() => { setGuideMode(key); setQuizOn(false); }}>
+                <span className="mj-mode-cn">{m.short}</span><span className="mj-mode-en">{m.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <button className="mj-ghost-btn" style={{ marginTop: 0, marginBottom: 14 }} onClick={() => { if (quizOn) setQuizOn(false); else newQuiz(); }}>
+            {quizOn ? '← Kembali ke daftar pola' : '🎴 Latihan: tebak polanya'}
+          </button>
+
+          {quizOn && quizQ && (
+            <div className="mj-card">
+              <div className="mj-row-between">
+                <div className="mj-label" style={{ marginBottom: 0 }}>Pola apa ini?</div>
+                <div className="mj-quiz-score">{quizScore.right}/{quizScore.total}</div>
+              </div>
+              <Tiles hand={quizQ.answer.example} />
+              <div className="mj-quiz-options">
+                {quizQ.options.map((o) => {
+                  let cls = 'mj-quiz-opt';
+                  if (quizPicked) {
+                    if (o.id === quizQ.answer.id) cls += ' correct';
+                    else if (o.id === quizPicked) cls += ' wrong';
+                  }
+                  return (
+                    <button key={o.id} className={cls} onClick={() => pickQuiz(o.id)}>
+                      <span className="mj-quiz-cn">{o.cn}</span>
+                      <span className="mj-quiz-en">{o.en}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {quizPicked && (
+                <div className="mj-quiz-explain">
+                  <div className="mj-quiz-verdict">
+                    {quizPicked === quizQ.answer.id ? '✓ Benar' : '✗ Yang benar: ' + quizQ.answer.cn}
+                    {' · '}{quizQ.answer.values[guideMode]} {cfg.unit}
+                  </div>
+                  <p>{quizQ.answer.desc}</p>
+                  <button className="mj-primary-btn" style={{ marginBottom: 0 }} onClick={newQuiz}>Soal Berikutnya</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!quizOn && (
+            <>
+              <div className="mj-cat-row">
+                <button className={'mj-cat-chip' + (guideCat === 'all' ? ' active' : '')} onClick={() => setGuideCat('all')}>Semua</button>
+                {CATEGORIES.map((c) => (
+                  <button key={c.id} className={'mj-cat-chip' + (guideCat === c.id ? ' active' : '')} onClick={() => setGuideCat(c.id)}>{c.label}</button>
+                ))}
+              </div>
+
+              {list.map((p) => {
+                const val = p.values[guideMode];
+                const isOpen = openPattern === p.id;
+                const isLimit = cfg.limit && val >= cfg.limit;
+                return (
+                  <div key={p.id} className={'mj-card mj-pattern-card' + (val === undefined ? ' na' : '')}>
+                    <div className="mj-pattern-head" onClick={() => setOpenPattern(isOpen ? null : p.id)}>
+                      <div className="mj-pattern-titles">
+                        <div className="mj-pattern-cn">{p.cn}</div>
+                        <div className="mj-pattern-en">{p.en}</div>
+                      </div>
+                      <div className="mj-pattern-value">
+                        {val === undefined
+                          ? <span className="mj-na-badge">tidak berlaku</span>
+                          : <><span className="mj-val-num">{val}</span><span className="mj-val-unit">{cfg.unit}</span>
+                              {isLimit && <div className="mj-limit-badge">限 batas</div>}</>}
+                      </div>
+                    </div>
+                    {p.example.length > 0 && <Tiles hand={p.example} size="sm" />}
+                    <p className="mj-pattern-desc">{p.desc}</p>
+                    {isOpen && (
+                      <div className="mj-pattern-extra">
+                        <div className="mj-label" style={{ marginTop: 4 }}>Tips di meja</div>
+                        <p className="mj-pattern-desc" style={{ marginBottom: 8 }}>{p.tips}</p>
+                        <div className="mj-label">Nilai di ruleset lain</div>
+                        <div className="mj-compare-row">
+                          {Object.entries(MODES).filter(([k]) => k !== 'custom').map(([k, m]) => (
+                            <div key={k} className="mj-compare-box">
+                              <div className="mj-compare-label">{m.short}</div>
+                              <div className="mj-compare-val">{p.values[k] === undefined ? '—' : `${p.values[k]} ${m.unit}`}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <button className="mj-link-btn" onClick={() => setOpenPattern(isOpen ? null : p.id)}>
+                      {isOpen ? 'Tutup' : 'Tips & perbandingan ruleset'}
+                    </button>
+                  </div>
+                );
+              })}
+
+              <div className="mj-disclaimer">
+                Nilai di sini mengikuti versi yang paling umum dipakai. Aturan rumah tiap meja bisa berbeda — kalau meja kamu pakai nilai lain, pakai mode Custom saat host game.
+              </div>
+            </>
+          )}
+        </div>
+        {renderNav('guide')}
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- SCANNER -------------------- */
+  if (view === 'scan') {
+    const cfg = MODES[scanMode];
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <button className="mj-back-btn" onClick={() => setView(game ? 'playing' : 'home')}>← Kembali</button>
+          <div className="mj-page-title">Scan Kartu Tangan</div>
+
+          <div className="mj-card">
+            <div className="mj-label">Hitung pakai aturan</div>
+            <div className="mj-mode-grid">
+              {Object.entries(MODES).filter(([k]) => k !== 'custom').map(([key, m]) => (
+                <button key={key} className={'mj-mode-chip' + (scanMode === key ? ' active' : '')} onClick={() => setScanMode(key)}>
+                  <span className="mj-mode-cn">{m.short}</span><span className="mj-mode-en">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {scanStage === 'idle' && (
+            <>
+              <div className="mj-card mj-upload-card" onPaste={onPasteImage}>
+                <div className="mj-upload-icon">🀄</div>
+                <div className="mj-upload-title">Susun ubin tangan yang menang</div>
+                <div className="mj-upload-hint">Pilih ubin satu per satu, lalu poinnya dihitung sesuai ruleset di atas.</div>
+                <button className="mj-primary-btn" style={{ marginTop: 14, marginBottom: 0 }}
+                  onClick={() => { setScanTiles([]); setScanNotes(''); setScanImage(null); setScanStage('review'); setShowTilePicker(true); }}>
+                  Mulai Susun Ubin
+                </button>
+              </div>
+
+              {!apiKeySaved && (
+                <div className="mj-caveat-box">
+                  Hitung poin otomatis butuh API key. Isi dulu di <strong>Profil → API Key</strong>. Fitur lain di app ini jalan tanpa kunci.
+                </div>
+              )}
+              <div className="mj-card">
+                <div className="mj-label">Dari Foto</div>
+                <div className="mj-fallback-text" style={{ marginBottom: 12 }}>
+                  Ambil foto tangan yang menang, ubinnya dibaca otomatis lalu bisa kamu koreksi sebelum dihitung.
+                </div>
+                <input id="mj-file-gallery" ref={fileRef} className="mj-file-input" type="file" accept="image/*" onChange={onPickFile} />
+                <label htmlFor="mj-file-gallery" className="mj-ghost-btn mj-file-label" style={{ marginTop: 0 }}>🖼 Coba Pilih dari Galeri</label>
+                <input id="mj-file-camera" className="mj-file-input" type="file" accept="image/*" capture="environment" onChange={onPickFile} />
+                <label htmlFor="mj-file-camera" className="mj-ghost-btn mj-file-label">📸 Coba Kamera</label>
+                <button className="mj-link-btn mj-fallback-toggle" onClick={() => setShowFallback(!showFallback)}>
+                  {showFallback ? 'Sembunyikan' : 'Kontrol file bawaan'}
+                </button>
+                {showFallback && (
+                  <div className="mj-fallback-box">
+                    <input className="mj-native-input" type="file" accept="image/*" onChange={onPickFile} />
+                  </div>
+                )}
+                {scanError && <div className="mj-error-text" style={{ textAlign: 'center', marginTop: 10 }}>{scanError}</div>}
+              </div>
+            </>
+          )}
+
+          {scanStage === 'detecting' && (
+            <div className="mj-card mj-loading-card">
+              <div className="mj-spinner">麻</div>
+              <div>Membaca ubin dari foto…</div>
+            </div>
+          )}
+
+          {(scanStage === 'review' || scanStage === 'scoring') && (
+            <>
+              {scanImage && <img src={scanImage.dataUrl} alt="Foto tangan" className="mj-scan-preview" />}
+              <div className="mj-card">
+                <div className="mj-row-between">
+                  <div className="mj-label" style={{ marginBottom: 0 }}>Ubin terdeteksi ({scanTiles.length})</div>
+                  <button className="mj-link-btn" style={{ padding: 0 }} onClick={resetScan}>Mulai ulang</button>
+                </div>
+                <div className="mj-hint-text" style={{ textAlign: 'left', marginTop: 4, marginBottom: 8 }}>
+                  {scanImage
+                    ? 'Tap ubin untuk hapus. Cek dulu sebelum dihitung — deteksi foto bisa meleset.'
+                    : 'Tap ubin untuk hapus. Masukkan seluruh tangan termasuk ubin penutup.'}
+                </div>
+                {scanTiles.length === 0 && <div className="mj-empty">Belum ada ubin. Tap tombol di bawah untuk menambah.</div>}
+                <Tiles hand={scanTiles} onTileClick={(i) => setScanTiles(scanTiles.filter((_, x) => x !== i))} />
+                {scanNotes && <div className="mj-scan-note">Catatan: {scanNotes}</div>}
+                <button className="mj-ghost-btn" onClick={() => setShowTilePicker(true)}>+ Tambah ubin</button>
+              </div>
+              {scanError && <div className="mj-error-text" style={{ marginBottom: 10 }}>{scanError}</div>}
+              <button className="mj-primary-btn" disabled={scanStage === 'scoring' || scanTiles.length === 0} onClick={scoreHand}>
+                {scanStage === 'scoring' ? 'Menghitung…' : `Hitung Poin (${cfg.short})`}
+              </button>
+            </>
+          )}
+
+          {scanStage === 'result' && scanResult && (
+            <>
+              <div className="mj-card mj-result-card">
+                {scanResult.valid ? (
+                  <>
+                    <div className="mj-result-label">Total nilai</div>
+                    <div className="mj-result-total">{scanResult.total}<span className="mj-result-unit">{cfg.unit}</span></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mj-result-label">Tangan belum valid</div>
+                    <div className="mj-result-invalid">Kombinasi ubin ini belum membentuk tangan yang menang.</div>
+                  </>
+                )}
+              </div>
+
+              <div className="mj-card">
+                <div className="mj-label">Ubin yang dihitung</div>
+                <Tiles hand={scanTiles} size="sm" />
+                {scanResult.breakdown && <div className="mj-breakdown">{scanResult.breakdown}</div>}
+              </div>
+
+              {scanResult.patterns && scanResult.patterns.length > 0 && (
+                <div className="mj-card">
+                  <div className="mj-label">Pola yang terdeteksi</div>
+                  {scanResult.patterns.map((p, i) => (
+                    <div key={i} className="mj-result-pattern">
+                      <div className="mj-result-pattern-head">
+                        <div>
+                          <span className="mj-pattern-cn" style={{ fontSize: 15 }}>{p.cn}</span>
+                          <span className="mj-pattern-en" style={{ marginLeft: 6 }}>{p.en}</span>
+                        </div>
+                        <div className="mj-result-pattern-val">+{p.value}</div>
+                      </div>
+                      <div className="mj-result-pattern-why">{p.why}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {scanResult.caveats && (
+                <div className="mj-caveat-box">
+                  <strong>Perlu dicek manual:</strong> {scanResult.caveats}
+                </div>
+              )}
+
+              <div className="mj-disclaimer">
+                Hasil ini bantuan hitung, bukan wasit. Pola bonus seperti bunga, angin duduk, menang di ubin terakhir, dan aturan rumah tidak ikut terbaca dari foto — tambahkan sendiri kalau berlaku.
+              </div>
+
+              {game && scanResult.valid && (
+                <button className="mj-primary-btn" onClick={useScannedValue}>
+                  Pakai nilai ini untuk ronde 局{game.round}
+                </button>
+              )}
+              <button className="mj-ghost-btn" onClick={resetScan}>Hitung tangan lain</button>
+            </>
+          )}
+
+          {showTilePicker && (
+            <div className="mj-sheet-backdrop" onClick={() => setShowTilePicker(false)}>
+              <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
+                <div className="mj-sheet-handle" />
+                <div className="mj-sheet-title">Tambah Ubin</div>
+                {SUIT_ORDER.map((s) => (
+                  <div key={s} className="mj-picker-group">
+                    <div className="mj-label">{TILE_NAME[s]}</div>
+                    <div className="mj-picker-row">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                        <button key={n} className="mj-picker-tile" onClick={() => setScanTiles([...scanTiles, `${n}${s}`])}>
+                          {TILE_GLYPH[`${n}${s}`]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="mj-picker-group">
+                  <div className="mj-label">Angin & Naga</div>
+                  <div className="mj-picker-row">
+                    {HONOR_ORDER.map((h) => (
+                      <button key={h} className="mj-picker-tile" onClick={() => setScanTiles([...scanTiles, h])}>{TILE_GLYPH[h]}</button>
+                    ))}
+                  </div>
+                </div>
+                <button className="mj-primary-btn" style={{ marginTop: 10, marginBottom: 0 }} onClick={() => setShowTilePicker(false)}>Selesai</button>
+              </div>
+            </div>
+          )}
+        </div>
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- PROFILE -------------------- */
+  if (view === 'profile') {
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-page">
+          <div className="mj-page-title">Profil</div>
+          <div className="mj-card">
+            <div className="mj-label">Nama kamu</div>
+            {profile ? (
+              <div className="mj-row-between">
+                <div className="mj-profile-name">{profile.name}</div>
+                <button className="mj-link-btn" style={{ padding: 0 }} onClick={() => setProfile(null)}>Ubah</button>
+              </div>
+            ) : (
+              <div className="mj-onboard-name">
+                <input className="mj-text-input" placeholder="Nama kamu di game" value={profileNameInput}
+                  onChange={(e) => setProfileNameInput(e.target.value)} />
+                <button className="mj-mini-btn" onClick={saveProfileName}>Simpan</button>
+              </div>
+            )}
+          </div>
+          {profile && (
+            <div className="mj-card">
+              <div className="mj-label">Statistik Kamu</div>
+              <div className="mj-stat-grid">
+                <div className="mj-stat-box"><div className="mj-stat-label">Games</div><div className="mj-stat-value">{myStats ? myStats.gamesPlayed : 0}</div></div>
+                <div className="mj-stat-box"><div className="mj-stat-label">Menang</div><div className="mj-stat-value">{myStats ? myStats.wins : 0}</div></div>
+                <div className="mj-stat-box">
+                  <div className="mj-stat-label">Acc. Point</div>
+                  <div className={'mj-stat-value' + (myStats && myStats.totalPoints < 0 ? ' negative' : myStats && myStats.totalPoints > 0 ? ' positive' : '')}>
+                    {myStats ? (myStats.totalPoints > 0 ? '+' : '') + myStats.totalPoints : 0}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="mj-card">
+            <div className="mj-label">API Key (untuk hitung otomatis)</div>
+            {apiKeySaved ? (
+              <>
+                <div className="mj-key-ok">Tersimpan: {apiKeySaved.slice(0, 12)}…{apiKeySaved.slice(-4)}</div>
+                <button className="mj-danger-btn" onClick={() => { setApiKeyStored(''); setApiKeySaved(''); showToast('API key dihapus'); }}>
+                  Hapus API Key
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mj-demo-hint">
+                  Fitur hitung poin otomatis memanggil API Anthropic. Ambil kunci di console.anthropic.com, lalu tempel di sini.
+                  Kunci disimpan hanya di HP ini dan tidak dikirim ke mana pun selain Anthropic. Jangan pakai kunci ini di halaman yang kamu bagikan ke publik.
+                </div>
+                <div className="mj-onboard-name">
+                  <input className="mj-text-input" type="password" placeholder="sk-ant-…" value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)} />
+                  <button className="mj-mini-btn" onClick={() => {
+                    const k = apiKeyInput.trim();
+                    if (!k) return;
+                    setApiKeyStored(k); setApiKeySaved(k); setApiKeyInput(''); showToast('API key tersimpan');
+                  }}>Simpan</button>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="mj-card">
+            <div className="mj-label">Mode Uji Coba</div>
+            {demoOn ? (
+              <>
+                <div className="mj-demo-active">Data demo sedang aktif — 8 game selesai dan 1 game berjalan pakai daftar pemain kamu.</div>
+                <button className="mj-danger-btn" onClick={clearDemo}>Hapus Data Demo</button>
+              </>
+            ) : (
+              <>
+                <div className="mj-demo-hint">Isi app dengan game contoh supaya kamu bisa lihat tampilan leaderboard, riwayat, dan meja skor sebelum main beneran. Data asli kamu disimpan dan bisa dikembalikan.</div>
+                <button className="mj-mini-btn mj-demo-btn" onClick={loadDemo}>🎴 Muat Data Demo</button>
+              </>
+            )}
+          </div>
+          <div className="mj-card">
+            <div className="mj-label">Data</div>
+            <button className="mj-danger-btn" onClick={() => { if (confirm('Hapus semua statistik & riwayat di device ini?')) { setStats({}); setHistory([]); setDemoOn(false); showToast('Data dihapus'); } }}>
+              Reset Statistik & Riwayat
+            </button>
+          </div>
+        </div>
+        {renderNav('profile')}
+        {renderToast()}
+      </div>
+    );
+  }
+
+  /* -------------------- PLAYING -------------------- */
+  if (view === 'playing' && game) {
+    const cfg = MODES[game.mode] || MODES.custom;
+    const others = [0, 1, 2, 3].filter((i) => i !== formWinner);
+    return (
+      <div className="mj-root">
+        <style>{CSS}</style>
+        <div className="mj-topbar">
+          <button className="mj-icon-btn" onClick={goHome} title="Home">⌂</button>
+          <div className={'mj-code-badge' + (game.demo ? ' demo' : '')}>
+            {game.demo ? 'DEMO' : `Kode ${game.code}${game.isHost ? '' : ' · Join'}`}
+          </div>
+          <div className="mj-topbar-actions">
+            {!game.isHost && <button className="mj-icon-btn" onClick={refreshShared} title="Refresh">⟳</button>}
+            <button className="mj-icon-btn" onClick={() => setShowHistorySheet(true)} title="Riwayat">局</button>
+            <button className="mj-icon-btn" onClick={() => setShowSettings(true)} title="Pengaturan">⚙</button>
+          </div>
+        </div>
+
+        <div className="mj-table-wrap">
+          {game.players.map((p, i) => (
+            <div key={i} className={'mj-seat ' + SEAT_CLASS[i]}>
+              <div className={'mj-tile' + (i === game.dealerIdx ? ' is-dealer' : '')}>
+                {i === game.dealerIdx && <div className="mj-dealer-badge">庄{game.streak > 1 ? ` ×${game.streak}` : ''}</div>}
+                <div className="mj-tile-name">{p.name}</div>
+                <div className={'mj-tile-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')}>{p.score > 0 ? '+' : ''}{p.score}</div>
+              </div>
+            </div>
+          ))}
+          <div className="mj-seat seat-center">
+            <div className="mj-center-info">
+              <div className="mj-round-no">局 {game.round}</div>
+              <div className="mj-dealer-line">庄家 {game.players[game.dealerIdx].name}</div>
+              <button className="mj-primary-btn mj-add-round-btn" onClick={() => openAddRound()}>+ Ronde</button>
+              {game.history.length > 0 && <button className="mj-link-btn mj-undo-btn" onClick={undoLast}>Undo ronde terakhir</button>}
+            </div>
+          </div>
+        </div>
+
+        {showAddRound && (
+          <div className="mj-sheet-backdrop" onClick={() => setShowAddRound(false)}>
+            <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mj-sheet-handle" />
+              <div className="mj-sheet-title">Ronde {game.round}</div>
+              <div className="mj-segmented">
+                <button className={!formDraw ? 'active' : ''} onClick={() => setFormDraw(false)}>Ada Menang</button>
+                <button className={formDraw ? 'active' : ''} onClick={() => setFormDraw(true)}>Seri (流局)</button>
+              </div>
+              {!formDraw && (
+                <>
+                  <div className="mj-label">Pemenang</div>
+                  <div className="mj-choice-row">
+                    {game.players.map((p, i) => (
+                      <button key={i} className={'mj-choice-btn' + (formWinner === i ? ' active' : '')}
+                        onClick={() => { setFormWinner(i); setFormDiscarder(null); }}>
+                        {p.name}{i === game.dealerIdx ? ' (庄)' : ''}</button>
+                    ))}
+                  </div>
+                  <div className="mj-label">Cara Menang</div>
+                  <div className="mj-segmented">
+                    <button className={formMethod === 'selfdraw' ? 'active' : ''} onClick={() => setFormMethod('selfdraw')}>自摸 Self-draw</button>
+                    <button className={formMethod === 'discard' ? 'active' : ''} onClick={() => setFormMethod('discard')}>放炮 Discard</button>
+                  </div>
+                  {formMethod === 'discard' && (
+                    <>
+                      <div className="mj-label">Pembuang</div>
+                      <div className="mj-choice-row">
+                        {others.map((i) => (
+                          <button key={i} className={'mj-choice-btn' + (formDiscarder === i ? ' active' : '')}
+                            onClick={() => setFormDiscarder(i)} disabled={formWinner === null}>{game.players[i].name}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <div className="mj-row-between">
+                    <div className="mj-label" style={{ marginBottom: 0 }}>Nilai ({cfg.unit})</div>
+                    <button className="mj-link-btn" style={{ padding: 0 }} onClick={() => { setShowAddRound(false); resetScan(); setScanMode(game.mode === 'custom' ? 'hongkong' : game.mode); setView('scan'); }}>
+                      📷 Scan dari foto
+                    </button>
+                  </div>
+                  <div className="mj-preset-row" style={{ marginTop: 8 }}>
+                    {cfg.presets.map((v) => (
+                      <button key={v} className={'mj-preset-chip' + (Number(formValue) === v ? ' active' : '')} onClick={() => setFormValue(String(v))}>{v}</button>
+                    ))}
+                  </div>
+                  <input className="mj-number-input mj-value-input" type="number" placeholder={`Jumlah ${cfg.unit}`} value={formValue} onChange={(e) => setFormValue(e.target.value)} />
+                  {formWinner !== null && formValue && Number(formValue) > 0 && (formMethod === 'selfdraw' || formDiscarder !== null) && (
+                    <div className="mj-preview">
+                      {computeDeltas(game, formWinner, formMethod, formDiscarder, Number(formValue)).map((d, i) => d !== 0 && (
+                        <span key={i} className={d > 0 ? 'positive' : 'negative'}>{game.players[i].name} {d > 0 ? '+' : ''}{d}</span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="mj-sheet-actions">
+                <button className="mj-ghost-btn" onClick={() => setShowAddRound(false)}>Batal</button>
+                <button className="mj-primary-btn" onClick={confirmRound}>Simpan Ronde</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showHistorySheet && (
+          <div className="mj-sheet-backdrop" onClick={() => setShowHistorySheet(false)}>
+            <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mj-sheet-handle" />
+              <div className="mj-sheet-title">Riwayat Ronde</div>
+              <div className="mj-history-list">
+                {game.history.length === 0 && <div className="mj-empty">Belum ada ronde.</div>}
+                {game.history.map((h) => (
+                  <div key={h.id} className="mj-history-row">
+                    <div className="mj-history-round">局{h.roundNum}</div>
+                    <div className="mj-history-desc">
+                      {h.draw ? 'Seri (流局)' : `${game.players[h.winnerIdx].name} menang · ${h.method === 'selfdraw' ? '自摸' : `放炮 dari ${game.players[h.discarderIdx].name}`} · ${h.value} ${cfg.unit}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button className="mj-ghost-btn" onClick={() => setShowHistorySheet(false)}>Tutup</button>
+            </div>
+          </div>
+        )}
+
+        {showSettings && (
+          <div className="mj-sheet-backdrop" onClick={() => setShowSettings(false)}>
+            <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
+              <div className="mj-sheet-handle" />
+              <div className="mj-sheet-title">Pengaturan</div>
+              <label className="mj-toggle-row"><span>Banker (庄) bayar/terima dobel</span>
+                <input type="checkbox" checked={game.dealerDoubles} onChange={(e) => setGame({ ...game, dealerDoubles: e.target.checked })} /></label>
+              <label className="mj-toggle-row"><span>Banker tetap jika menang</span>
+                <input type="checkbox" checked={game.dealerKeepsSeat} onChange={(e) => setGame({ ...game, dealerKeepsSeat: e.target.checked })} /></label>
+              <button className="mj-ghost-btn" onClick={() => setShowSettings(false)}>Tutup</button>
+              {!confirmEnd ? (
+                <>
+                  <button className="mj-primary-btn" style={{ marginTop: 10 }} onClick={() => setConfirmEnd('save')}>Selesaikan Game</button>
+                  <button className="mj-danger-btn" onClick={() => setConfirmEnd('discard')}>Batalkan Tanpa Simpan</button>
+                </>
+              ) : confirmEnd === 'save' ? (
+                <div className="mj-confirm-box">
+                  <div>Simpan hasil game ini ke statistik & leaderboard?</div>
+                  <div className="mj-confirm-actions">
+                    <button className="mj-ghost-btn" onClick={() => setConfirmEnd(null)}>Batal</button>
+                    <button className="mj-primary-btn" onClick={() => finishGame(true)}>Ya, Simpan</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mj-confirm-box">
+                  <div>Game akan dihapus tanpa masuk statistik. Yakin?</div>
+                  <div className="mj-confirm-actions">
+                    <button className="mj-ghost-btn" onClick={() => setConfirmEnd(null)}>Batal</button>
+                    <button className="mj-danger-btn" onClick={() => finishGame(false)}>Ya, Batalkan</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {renderNav('')}
+        {renderToast()}
+      </div>
+    );
+  }
+
+  setView('home');
+  return null;
+}
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700;900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+:root{ --felt-deep:#0e3b30; --felt-shadow:#082a22; --tile-ivory:#f3ecda; --ink:#1c1a15; --seal-red:#b23a2e; --bamboo:#5b8c69; --gold:#c79a3b; --silver:#c9c9c9; --bronze:#b87333; }
+.mj-root{ min-height:100vh;width:100%; background:radial-gradient(ellipse at 50% -10%, rgba(199,154,59,0.10), transparent 55%), linear-gradient(180deg,var(--felt-deep),var(--felt-shadow)); font-family:'Inter',sans-serif;color:var(--tile-ivory);box-sizing:border-box; }
+.mj-page{max-width:460px;margin:0 auto;padding:20px 14px 96px;}
+.mj-loading{display:flex;align-items:center;justify-content:center;}
+.mj-loading-tile{font-family:'Noto Serif TC',serif;font-size:40px;font-weight:900;background:var(--tile-ivory);color:var(--ink);width:64px;height:64px;border-radius:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 0 rgba(0,0,0,0.35);animation:mj-pulse 1.2s ease-in-out infinite;}
+@keyframes mj-pulse{0%,100%{transform:scale(1);}50%{transform:scale(0.92);}}
+
+.mj-hero{text-align:center;margin-bottom:20px;}
+.mj-hero-glyph{font-family:'Noto Serif TC',serif;font-weight:900;font-size:28px;color:var(--gold);letter-spacing:0.15em;}
+.mj-hero-title{font-family:'Noto Serif TC',serif;font-size:24px;margin:4px 0 6px;}
+.mj-hero-sub{font-size:13px;opacity:0.65;}
+.mj-page-title{font-family:'Noto Serif TC',serif;font-size:20px;font-weight:700;color:var(--gold);margin-bottom:16px;}
+.mj-back-btn{background:none;border:none;color:var(--tile-ivory);opacity:0.8;font-size:13px;font-weight:600;padding:0 0 14px;cursor:pointer;}
+
+.mj-card{background:rgba(243,236,218,0.06);border:1px solid rgba(243,236,218,0.14);border-radius:14px;padding:16px;margin-bottom:14px;}
+.mj-label{font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.6;margin-bottom:8px;font-weight:600;}
+.mj-row-between{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+.mj-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.mj-mode-chip{background:var(--tile-ivory);color:var(--ink);border:none;border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,0.25);}
+.mj-mode-chip.active{background:var(--gold);box-shadow:0 3px 0 rgba(0,0,0,0.4);}
+.mj-mode-cn{font-family:'Noto Serif TC',serif;font-weight:700;font-size:14px;}
+.mj-mode-en{font-size:11px;opacity:0.75;}
+.mj-players-input{display:grid;gap:8px;}
+.mj-text-input,.mj-number-input{background:var(--tile-ivory);color:var(--ink);border:none;border-radius:8px;padding:10px 12px;font-size:14px;font-weight:500;}
+.mj-number-input{width:90px;text-align:right;font-family:'IBM Plex Mono',monospace;}
+.mj-code-input{text-align:center;letter-spacing:0.3em;font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;width:100%;box-sizing:border-box;}
+.mj-link-btn{background:none;border:none;color:var(--gold);font-size:12.5px;font-weight:600;padding:4px 0;cursor:pointer;text-align:left;}
+.mj-settings{display:grid;gap:10px;}
+.mj-toggle-row{display:flex;align-items:center;justify-content:space-between;font-size:13.5px;gap:12px;}
+.mj-toggle-row input{width:18px;height:18px;accent-color:var(--gold);}
+.mj-primary-btn{width:100%;background:var(--seal-red);color:var(--tile-ivory);border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,0.35);margin-bottom:10px;}
+.mj-primary-btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,0.35);}
+.mj-primary-btn:disabled{opacity:0.6;}
+.mj-ghost-btn{width:100%;background:transparent;color:var(--tile-ivory);border:1px solid rgba(243,236,218,0.3);border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;}
+.mj-danger-btn{width:100%;background:rgba(178,58,46,0.2);color:#ff8a7a;border:1px solid var(--seal-red);border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px;}
+.mj-scan-cta{border-color:var(--gold);color:var(--gold);}
+.mj-mini-btn{background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:10px 14px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
+.mj-continue-card{display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-color:var(--gold);}
+.mj-continue-title{font-weight:700;font-size:14px;}
+.mj-continue-sub{font-size:12px;opacity:0.65;margin-top:2px;}
+.mj-continue-arrow{color:var(--gold);font-size:20px;}
+.mj-onboard-name{display:flex;gap:8px;}
+.mj-onboard-name .mj-text-input{flex:1;min-width:0;}
+.mj-stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.mj-stat-box{background:rgba(243,236,218,0.07);border-radius:10px;padding:10px 6px;text-align:center;}
+.mj-stat-label{font-size:10px;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;}
+.mj-stat-value{font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:600;}
+.mj-stat-value.positive{color:var(--bamboo);} .mj-stat-value.negative{color:#ff8a7a;}
+.mj-stat-locked{font-size:11px;opacity:0.55;padding-top:4px;}
+.mj-lb-preview{display:grid;gap:6px;}
+.mj-lb-row{display:flex;align-items:center;gap:10px;padding:6px 0;}
+.mj-lb-row-full{padding:10px 0;border-bottom:1px solid rgba(243,236,218,0.08);}
+.mj-lb-row-full:last-child{border-bottom:none;}
+.mj-lb-rank{width:22px;font-family:'IBM Plex Mono',monospace;font-weight:700;opacity:0.7;text-align:center;flex-shrink:0;}
+.mj-lb-rank.medal{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink);font-weight:800;opacity:1;}
+.mj-lb-rank.medal-0{background:var(--gold);} .mj-lb-rank.medal-1{background:var(--silver);} .mj-lb-rank.medal-2{background:var(--bronze);}
+.mj-lb-info{flex:1;display:flex;flex-direction:column;min-width:0;}
+.mj-lb-name{font-weight:600;font-size:13.5px;flex:1;}
+.mj-lb-sub{font-size:11px;opacity:0.55;}
+.mj-lb-points{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;}
+.mj-lb-points.positive{color:var(--bamboo);} .mj-lb-points.negative{color:#ff8a7a;}
+.mj-slot{display:flex;align-items:center;gap:8px;background:rgba(243,236,218,0.07);border:1px solid rgba(243,236,218,0.15);border-radius:10px;padding:4px 8px 4px 4px;cursor:pointer;}
+.mj-slot.active{border-color:var(--gold);background:rgba(199,154,59,0.12);}
+.mj-slot-seat{font-family:'Noto Serif TC',serif;font-size:14px;font-weight:700;background:var(--tile-ivory);color:var(--ink);width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.mj-slot.active .mj-slot-seat{background:var(--gold);}
+.mj-slot-input{flex:1;min-width:0;background:none;border:none;color:var(--tile-ivory);font-size:14px;font-weight:600;font-family:'Inter',sans-serif;outline:none;padding:8px 0;}
+.mj-slot-input::placeholder{color:rgba(243,236,218,0.35);font-weight:400;}
+.mj-slot-clear{background:none;border:none;color:var(--tile-ivory);opacity:0.5;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;}
+.mj-roster-row{display:flex;flex-wrap:wrap;gap:6px;}
+.mj-roster-chip{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);padding:8px 12px;border-radius:20px;font-size:12.5px;font-weight:500;cursor:pointer;}
+.mj-roster-chip.used{background:rgba(199,154,59,0.2);border-color:var(--gold);color:var(--gold);}
+.mj-roster-check{font-size:11px;}
+.mj-empty-demo{text-align:center;padding-bottom:6px;}
+.mj-demo-btn{margin-top:4px;}
+.mj-key-ok{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--bamboo);margin-bottom:10px;word-break:break-all;}
+.mj-demo-hint,.mj-demo-active{font-size:12.5px;line-height:1.55;opacity:0.75;margin-bottom:10px;}
+.mj-demo-active{color:var(--gold);opacity:1;}
+.mj-code-badge.demo{background:rgba(178,58,46,0.2);border-color:var(--seal-red);color:#ff8a7a;letter-spacing:0.12em;}
+.mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
+.mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
+.mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
+.mj-profile-name{font-family:'Noto Serif TC',serif;font-size:18px;font-weight:700;}
+.mj-history-card{padding:14px 16px;}
+.mj-history-card-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
+.mj-history-card-title{font-weight:700;font-size:14px;}
+.mj-history-card-sub{font-size:11.5px;opacity:0.6;margin-top:2px;}
+.mj-history-card-toggle{font-size:20px;color:var(--gold);width:24px;text-align:center;}
+.mj-history-standings{margin-top:10px;display:grid;gap:2px;}
+.mj-history-rounds{margin-top:10px;border-top:1px solid rgba(243,236,218,0.1);padding-top:10px;display:grid;gap:8px;}
+
+/* tiles */
+.mj-hand{display:flex;flex-wrap:wrap;gap:3px;margin:10px 0;}
+.mj-tile-glyph{background:var(--tile-ivory);color:var(--ink);border-radius:5px;width:30px;height:40px;display:flex;align-items:center;justify-content:center;font-size:26px;line-height:1;box-shadow:0 2px 0 rgba(0,0,0,0.3);user-select:none;}
+.mj-hand.sm .mj-tile-glyph{width:25px;height:33px;font-size:21px;}
+.mj-tile-glyph.clickable{cursor:pointer;}
+.mj-tile-glyph.clickable:active{transform:translateY(2px);box-shadow:0 0 0 rgba(0,0,0,0.3);}
+
+/* guidebook */
+.mj-cat-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+.mj-cat-chip{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);padding:7px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-weight:600;}
+.mj-cat-chip.active{background:var(--gold);color:var(--ink);border-color:var(--gold);}
+.mj-pattern-card{padding:14px 16px;}
+.mj-pattern-card.na{opacity:0.55;}
+.mj-pattern-head{display:flex;align-items:flex-start;justify-content:space-between;cursor:pointer;gap:10px;}
+.mj-pattern-cn{font-family:'Noto Serif TC',serif;font-size:17px;font-weight:700;}
+.mj-pattern-en{font-size:11.5px;opacity:0.6;}
+.mj-pattern-value{text-align:right;flex-shrink:0;}
+.mj-val-num{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;color:var(--gold);}
+.mj-val-unit{font-size:11px;opacity:0.6;margin-left:3px;}
+.mj-limit-badge{font-family:'Noto Serif TC',serif;font-size:10px;background:var(--seal-red);color:var(--tile-ivory);padding:1px 7px;border-radius:10px;margin-top:3px;}
+.mj-na-badge{font-size:10.5px;background:rgba(243,236,218,0.12);padding:3px 8px;border-radius:10px;opacity:0.8;}
+.mj-pattern-desc{font-size:13px;line-height:1.55;opacity:0.85;margin:6px 0 0;}
+.mj-pattern-extra{margin-top:10px;border-top:1px solid rgba(243,236,218,0.1);padding-top:8px;}
+.mj-compare-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+.mj-compare-box{background:rgba(243,236,218,0.07);border-radius:8px;padding:8px 4px;text-align:center;}
+.mj-compare-label{font-family:'Noto Serif TC',serif;font-size:11px;opacity:0.7;}
+.mj-compare-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--gold);margin-top:2px;}
+.mj-disclaimer{font-size:11.5px;opacity:0.5;line-height:1.55;padding:10px 4px;}
+.mj-quiz-options{display:grid;gap:8px;margin-top:10px;}
+.mj-quiz-opt{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);padding:11px 14px;border-radius:10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:1px;}
+.mj-quiz-opt.correct{background:rgba(91,140,105,0.35);border-color:var(--bamboo);}
+.mj-quiz-opt.wrong{background:rgba(178,58,46,0.3);border-color:var(--seal-red);}
+.mj-quiz-cn{font-family:'Noto Serif TC',serif;font-size:14.5px;font-weight:700;}
+.mj-quiz-en{font-size:11px;opacity:0.65;}
+.mj-quiz-score{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--gold);font-weight:700;}
+.mj-quiz-explain{margin-top:12px;border-top:1px solid rgba(243,236,218,0.12);padding-top:10px;}
+.mj-quiz-verdict{font-weight:700;font-size:13.5px;color:var(--gold);margin-bottom:6px;}
+.mj-quiz-explain p{font-size:13px;line-height:1.55;opacity:0.85;margin:0 0 12px;}
+
+/* scanner */
+.mj-file-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
+.mj-file-label{display:block;box-sizing:border-box;text-align:center;margin-top:14px;margin-bottom:0;}
+.mj-file-input:focus + .mj-file-label{outline:2px solid var(--gold);outline-offset:2px;}
+.mj-upload-card{text-align:center;padding:26px 18px;}
+.mj-fallback-toggle{display:block;margin:10px auto 0;text-align:center;opacity:0.8;}
+.mj-fallback-box{background:rgba(243,236,218,0.07);border:1px dashed rgba(243,236,218,0.3);border-radius:10px;padding:12px;margin-top:8px;}
+.mj-fallback-text{font-size:12px;opacity:0.65;line-height:1.5;margin-bottom:10px;text-align:left;}
+.mj-native-input{width:100%;color:var(--tile-ivory);font-size:13px;}
+.mj-native-input::file-selector-button{background:var(--tile-ivory);color:var(--ink);border:none;border-radius:8px;padding:9px 13px;font-weight:600;font-size:13px;margin-right:10px;}
+.mj-upload-icon{font-size:34px;margin-bottom:8px;}
+.mj-upload-title{font-family:'Noto Serif TC',serif;font-size:16px;font-weight:700;margin-bottom:6px;}
+.mj-upload-hint{font-size:12.5px;opacity:0.6;line-height:1.55;}
+.mj-loading-card{text-align:center;padding:30px 18px;font-size:13.5px;opacity:0.85;}
+.mj-spinner{font-family:'Noto Serif TC',serif;font-size:30px;background:var(--tile-ivory);color:var(--ink);width:50px;height:50px;border-radius:7px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;animation:mj-pulse 1.1s ease-in-out infinite;}
+.mj-scan-preview{width:100%;border-radius:12px;margin-bottom:14px;display:block;}
+.mj-scan-note{font-size:12px;opacity:0.65;background:rgba(199,154,59,0.12);border-left:2px solid var(--gold);padding:8px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.5;}
+.mj-result-card{text-align:center;padding:24px 16px;border-color:var(--gold);}
+.mj-result-label{font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.6;margin-bottom:6px;}
+.mj-result-total{font-family:'IBM Plex Mono',monospace;font-size:48px;font-weight:700;color:var(--gold);line-height:1;}
+.mj-result-unit{font-size:15px;opacity:0.6;margin-left:8px;font-family:'Inter',sans-serif;}
+.mj-result-invalid{font-size:13.5px;opacity:0.75;}
+.mj-breakdown{font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:rgba(243,236,218,0.07);padding:9px 12px;border-radius:8px;margin-top:8px;line-height:1.6;}
+.mj-result-pattern{border-bottom:1px solid rgba(243,236,218,0.09);padding:9px 0;}
+.mj-result-pattern:last-child{border-bottom:none;}
+.mj-result-pattern-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+.mj-result-pattern-val{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--gold);font-size:15px;}
+.mj-result-pattern-why{font-size:12px;opacity:0.65;margin-top:3px;line-height:1.5;}
+.mj-caveat-box{background:rgba(199,154,59,0.12);border:1px solid rgba(199,154,59,0.35);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.55;margin-bottom:14px;}
+.mj-picker-group{margin-bottom:12px;}
+.mj-picker-row{display:flex;flex-wrap:wrap;gap:5px;}
+.mj-picker-tile{background:var(--tile-ivory);color:var(--ink);border:none;border-radius:5px;width:32px;height:42px;font-size:26px;line-height:1;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;}
+
+/* playing */
+.mj-topbar{display:flex;align-items:center;justify-content:space-between;max-width:480px;margin:0 auto;padding:16px 14px 18px;}
+.mj-code-badge{font-family:'IBM Plex Mono',monospace;background:rgba(199,154,59,0.15);border:1px solid var(--gold);color:var(--gold);padding:6px 12px;border-radius:20px;font-size:12.5px;font-weight:700;}
+.mj-topbar-actions{display:flex;gap:8px;}
+.mj-icon-btn{background:rgba(243,236,218,0.1);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);width:34px;height:34px;border-radius:9px;font-size:14px;cursor:pointer;font-family:'Noto Serif TC',serif;}
+.mj-table-wrap{max-width:440px;margin:0 auto;padding:0 14px 100px;display:grid;grid-template-columns:1fr 1.3fr 1fr;grid-template-areas:". top ." "left center right" ". bottom .";gap:10px;align-items:center;}
+.seat-top{grid-area:top;} .seat-left{grid-area:left;} .seat-right{grid-area:right;} .seat-bottom{grid-area:bottom;} .seat-center{grid-area:center;}
+.mj-tile{background:var(--tile-ivory);color:var(--ink);border-radius:12px;padding:12px 8px;text-align:center;box-shadow:0 4px 0 rgba(0,0,0,0.3);position:relative;min-height:64px;display:flex;flex-direction:column;justify-content:center;}
+.mj-tile.is-dealer{outline:2px solid var(--gold);box-shadow:0 4px 0 rgba(0,0,0,0.3),0 0 0 4px rgba(199,154,59,0.18);}
+.mj-dealer-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--seal-red);color:var(--tile-ivory);font-family:'Noto Serif TC',serif;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+.mj-tile-name{font-size:12px;font-weight:600;opacity:0.75;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mj-tile-score{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;}
+.mj-tile-score.positive{color:var(--bamboo);} .mj-tile-score.negative{color:var(--seal-red);}
+.mj-center-info{text-align:center;padding:6px 2px;}
+.mj-round-no{font-family:'Noto Serif TC',serif;font-size:15px;color:var(--gold);font-weight:700;}
+.mj-dealer-line{font-size:11px;opacity:0.7;margin:2px 0 10px;}
+.mj-add-round-btn{padding:10px;font-size:13px;margin-bottom:0;}
+.mj-undo-btn{margin-top:6px;text-align:center;width:100%;}
+.mj-sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
+.mj-sheet{width:100%;max-width:480px;background:var(--felt-shadow);border-radius:20px 20px 0 0;padding:10px 18px 22px;max-height:85vh;overflow-y:auto;border-top:1px solid rgba(243,236,218,0.15);}
+.mj-sheet-handle{width:40px;height:4px;background:rgba(243,236,218,0.3);border-radius:4px;margin:6px auto 14px;}
+.mj-sheet-title{font-family:'Noto Serif TC',serif;font-size:17px;font-weight:700;color:var(--gold);margin-bottom:14px;}
+.mj-segmented{display:flex;background:rgba(243,236,218,0.08);border-radius:10px;padding:3px;margin-bottom:14px;}
+.mj-segmented button{flex:1;background:none;border:none;color:var(--tile-ivory);opacity:0.6;padding:9px 6px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;}
+.mj-segmented button.active{background:var(--gold);color:var(--ink);opacity:1;}
+.mj-choice-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.mj-choice-btn{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);padding:9px 14px;border-radius:20px;font-size:13px;cursor:pointer;}
+.mj-choice-btn.active{background:var(--seal-red);border-color:var(--seal-red);}
+.mj-choice-btn:disabled{opacity:0.3;}
+.mj-preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.mj-preset-chip{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);width:38px;height:38px;border-radius:9px;font-family:'IBM Plex Mono',monospace;font-size:13px;cursor:pointer;}
+.mj-preset-chip.active{background:var(--gold);color:var(--ink);border-color:var(--gold);font-weight:700;}
+.mj-value-input{width:100%;text-align:left;margin-bottom:10px;box-sizing:border-box;}
+.mj-preview{display:flex;flex-wrap:wrap;gap:8px;background:rgba(243,236,218,0.06);border-radius:10px;padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
+.mj-preview .positive{color:var(--bamboo);} .mj-preview .negative{color:#ff8a7a;}
+.mj-sheet-actions{display:flex;gap:10px;margin-top:10px;}
+.mj-sheet-actions .mj-ghost-btn{margin-top:0;} .mj-sheet-actions .mj-primary-btn{margin-top:0;margin-bottom:0;}
+.mj-history-list{display:grid;gap:8px;max-height:50vh;overflow-y:auto;margin-bottom:10px;}
+.mj-history-row{background:rgba(243,236,218,0.06);border-radius:9px;padding:9px 12px;font-size:12.5px;}
+.mj-history-round{font-family:'Noto Serif TC',serif;color:var(--gold);font-size:11px;font-weight:700;margin-bottom:2px;}
+.mj-confirm-box{margin-top:10px;font-size:13px;text-align:center;}
+.mj-confirm-actions{display:flex;gap:10px;margin-top:8px;}
+.mj-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(8,42,34,0.96);backdrop-filter:blur(6px);border-top:1px solid rgba(243,236,218,0.12);display:flex;justify-content:space-around;padding:8px 4px 10px;z-index:40;}
+.mj-nav-item{background:none;border:none;color:var(--tile-ivory);opacity:0.55;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10.5px;font-weight:600;cursor:pointer;padding:4px 6px;}
+.mj-nav-item.active{opacity:1;color:var(--gold);}
+.mj-nav-icon{font-family:'Noto Serif TC',serif;font-size:17px;}
+.mj-toast{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--tile-ivory);padding:9px 16px;border-radius:20px;font-size:12.5px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:60;max-width:88%;text-align:center;}
+@media (max-width:380px){ .mj-table-wrap{grid-template-columns:0.6fr 1.3fr 0.6fr;} }
+`;
+
+ReactDOM.createRoot(document.getElementById('root')).render(<MahjongApp />);
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+</script>
+</body>
+</html>
