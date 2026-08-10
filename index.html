@@ -449,16 +449,16 @@ function initialsOf(n) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
-function Avatar({ name, size, wind, dealer, title }) {
+function Avatar({ name, size, wind, dealer, level }) {
   const sz = size || 44;
   const h = hashName(name || '');
-  let [c1, c2] = AVATAR_COLORS[h % AVATAR_COLORS.length];
-  const ach = title ? achievementById(title) : null;
-  const tier = ach ? TIERS[ach.tier] : null;
-  if (tier) { c1 = tier.grad[0]; c2 = tier.grad[1]; }
-  const gid = 'av' + (h % 100000) + (ach ? ach.id.replace(/[^a-z]/g, '') : '');
+  const lvl = level && level > 0 ? level : null;
+  const ch = lvl ? characterFor(lvl) : null;
+  let [c1, c2] = ch ? ch.pal : AVATAR_COLORS[h % AVATAR_COLORS.length];
+  const gid = 'av' + (h % 100000) + (lvl || 0);
+  const glow = lvl && lvl >= 51;
   return (
-    <div className={'mj-avatar-wrap' + (dealer ? ' dealer' : '') + (tier && tier.glow ? ' glow t' + ach.tier : '')}
+    <div className={'mj-avatar-wrap' + (dealer ? ' dealer' : '') + (glow ? ' glow' : '') + (lvl && lvl >= 91 ? ' t5' : '')}
       style={{ width: sz, height: sz }}>
       <svg width={sz} height={sz} viewBox="0 0 48 48">
         <defs>
@@ -467,16 +467,16 @@ function Avatar({ name, size, wind, dealer, title }) {
           </linearGradient>
         </defs>
         <circle cx="24" cy="24" r="23" fill={`url(#${gid})`} />
-        <circle cx="24" cy="24" r="23" fill="none" stroke={tier ? tier.color : 'rgba(243,236,218,0.35)'} strokeWidth={tier ? 2.5 : 1.5} />
-        {ach
-          ? <g><AvatarArt art={ach.art} /></g>
+        <circle cx="24" cy="24" r="23" fill="none"
+          stroke={lvl ? (lvl >= 91 ? '#f7d774' : lvl >= 51 ? '#dcae4c' : 'rgba(243,236,218,0.5)') : 'rgba(243,236,218,0.35)'}
+          strokeWidth={lvl && lvl >= 51 ? 2.5 : 1.5} />
+        {ch
+          ? <g><AvatarArt art={ch.art} /><AvatarAcc acc={ch.acc} /></g>
           : <text x="24" y="30" textAnchor="middle" fontSize="17" fontWeight="700"
               fill="#f3ecda" fontFamily="Inter, sans-serif">{initialsOf(name)}</text>}
       </svg>
       {wind !== undefined && <span className="mj-avatar-wind">{WIND_GLYPH[wind]}</span>}
-      {ach && sz >= 34 && (
-        <span className="mj-avatar-badge" style={{ borderColor: tier.color, color: tier.color }}>{ach.badge}</span>
-      )}
+      {lvl && sz >= 34 && <span className="mj-avatar-lv">{lvl}</span>}
     </div>
   );
 }
@@ -560,7 +560,7 @@ function AvatarArt({ art }) {
     ),
     tilestack: (
       <g>
-        <rect x="9" y="18" width="13" height="19" rx="3" fill="#e9dfc4" <rect x="9" y="18" width="13" height="19" rx="3" fill="#e6dcc2" />
+        <rect x="9" y="18" width="13" height="19" rx="3" fill="#e6dcc2" />
         <rect x="26" y="18" width="13" height="19" rx="3" fill="#e6dcc2" />
         <rect x="17.5" y="11" width="13" height="19" rx="3" fill="#f7f2e4" stroke="#d8cba9" strokeWidth="1.2" />
         <circle cx="24" cy="20" r="4.5" fill="none" stroke="#1f4e8c" strokeWidth="1.6" />
@@ -618,6 +618,32 @@ function AvatarArt({ art }) {
         <path d="M22 27 q2 2 4 0" stroke="#b23a2e" strokeWidth="1.2" fill="none" strokeLinecap="round" />
         <circle cx="24" cy="35" r="3" fill="#dcae4c" />
         <path d="M36 28 q5 -6 2 -11" stroke="#f7f2e4" strokeWidth="3.4" fill="none" strokeLinecap="round" />
+      </g>
+    ),
+    koi: (
+      <g>
+        <path d="M38 24 q-4 -10 -14 -10 q-12 0 -14 10 q2 10 14 10 q10 0 14 -10 Z" fill="#e8663f" />
+        <path d="M24 14 q-8 2 -10 10 q2 8 10 10 q-4 -10 0 -20 Z" fill="#f7f2e4" />
+        <path d="M8 24 l-5 -7 v14 Z" fill="#e8663f" />
+        <circle cx="32" cy="21" r="2.2" fill="#f7f2e4" /><circle cx="32.5" cy="21" r="1.1" fill="#23201a" />
+        <path d="M22 14 q3 -5 7 -3" stroke="#c0392b" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        <circle cx="20" cy="22" r="2" fill="#c0392b" opacity="0.8" />
+        <circle cx="16" cy="28" r="1.6" fill="#c0392b" opacity="0.7" />
+        <path d="M30 34 q-4 5 -9 4" stroke="#e8663f" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      </g>
+    ),
+    tiger: (
+      <g>
+        <circle cx="14" cy="14" r="4.5" fill="#e0912a" /><circle cx="34" cy="14" r="4.5" fill="#e0912a" />
+        <circle cx="14" cy="14" r="2" fill="#f2d9b0" /><circle cx="34" cy="14" r="2" fill="#f2d9b0" />
+        <circle cx="24" cy="26" r="12.5" fill="#e0912a" />
+        <path d="M24 14 v5 M16 17 l2 4 M32 17 l-2 4 M12 26 h4 M36 26 h-4" stroke="#3a2a14" strokeWidth="2" strokeLinecap="round" />
+        <path d="M13 25 q11 -6 22 0 q0 8 -11 12 q-11 -4 -11 -12 Z" fill="#f7ecd6" />
+        <ellipse cx="19.5" cy="24" rx="2.1" ry="2.4" fill="#23201a" />
+        <ellipse cx="28.5" cy="24" rx="2.1" ry="2.4" fill="#23201a" />
+        <path d="M22 30 h4 l-2 2 Z" fill="#c0392b" />
+        <path d="M20 33 q4 3 8 0" stroke="#3a2a14" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        <text x="24" y="20" textAnchor="middle" fontSize="7" fill="#3a2a14" fontFamily="serif" fontWeight="700">王</text>
       </g>
     ),
     mask: (
@@ -692,6 +718,163 @@ function AvatarArt({ art }) {
     ),
   };
   return A[art] || A.tile;
+}
+
+/* Hiasan yang menumpuk di atas karakter dasar, menandai tingkatan level. */
+function AvatarAcc({ acc }) {
+  if (!acc) return null;
+  if (acc === 'ribbon') {
+    return <g><path d="M10 40 q14 5 28 0 l-3 5 q-11 3 -22 0 Z" fill="#c8493b" /></g>;
+  }
+  if (acc === 'sparkle') {
+    return (
+      <g fill="#fff3d0">
+        <path d="M9 12 l1.4 3.4 3.4 1.4 -3.4 1.4 -1.4 3.4 -1.4 -3.4 -3.4 -1.4 3.4 -1.4 Z" />
+        <path d="M39 30 l1 2.6 2.6 1 -2.6 1 -1 2.6 -1 -2.6 -2.6 -1 2.6 -1 Z" />
+        <circle cx="38" cy="12" r="1.4" />
+      </g>
+    );
+  }
+  if (acc === 'halo') {
+    return <g><ellipse cx="24" cy="7" rx="12" ry="3.4" fill="none" stroke="#f7d774" strokeWidth="2.2" opacity="0.95" /></g>;
+  }
+  if (acc === 'horns') {
+    return (
+      <g fill="#e8e0cd">
+        <path d="M11 14 q-4 -8 1 -11 q3 4 6 6 Z" />
+        <path d="M37 14 q4 -8 -1 -11 q-3 4 -6 6 Z" />
+      </g>
+    );
+  }
+  if (acc === 'crown') {
+    return (
+      <g>
+        <path d="M12 12 l3 -8 4 5 5 -7 5 7 4 -5 3 8 Z" fill="#dcae4c" stroke="#8f6a17" strokeWidth="1" />
+        <circle cx="24" cy="6" r="1.8" fill="#c8493b" />
+      </g>
+    );
+  }
+  if (acc === 'flame') {
+    return (
+      <g opacity="0.95">
+        <path d="M24 2 q5 6 3 10 q-3 -3 -6 -1 q1 -5 3 -9 Z" fill="#f7a13c" />
+        <path d="M11 12 q4 3 3 7 q-4 -2 -6 -6 Z" fill="#e0574a" />
+        <path d="M37 12 q-4 3 -3 7 q4 -2 6 -6 Z" fill="#e0574a" />
+      </g>
+    );
+  }
+  if (acc === 'divine') {
+    return (
+      <g>
+        <ellipse cx="24" cy="7" rx="13" ry="3.6" fill="none" stroke="#f7d774" strokeWidth="2.4" />
+        <path d="M12 11 l3 -8 4 5 5 -7 5 7 4 -5 3 8 Z" fill="#f7d774" stroke="#a1761f" strokeWidth="0.9" />
+        <g fill="#fff3d0">
+          <path d="M7 22 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2 Z" />
+          <path d="M41 22 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2 Z" />
+        </g>
+        <path d="M24 42 q-8 2 -12 -2 q6 5 12 5 q6 0 12 -5 q-4 4 -12 2 Z" fill="#c8493b" opacity="0.85" />
+      </g>
+    );
+  }
+  return null;
+}
+
+
+/* ============================ SISTEM LEVEL ============================ */
+/*
+  XP dikumpulkan dari permainan dan dari pencapaian.
+  Kebutuhan XP tiap level naik terus, jadi makin tinggi makin berat.
+*/
+function xpForLevel(L) {
+  return Math.round(30 + 8 * Math.pow(L, 1.15));
+}
+function totalXpTo(L) {
+  let t = 0;
+  for (let i = 1; i < L; i++) t += xpForLevel(i);
+  return t;
+}
+const MAX_LEVEL = 100;
+
+function levelFromXp(xp) {
+  let level = 1, rest = xp;
+  while (level < MAX_LEVEL && rest >= xpForLevel(level)) { rest -= xpForLevel(level); level += 1; }
+  const need = level >= MAX_LEVEL ? 0 : xpForLevel(level);
+  return { level, into: rest, need, pct: need ? Math.min(100, Math.round((rest / need) * 100)) : 100 };
+}
+
+const XP_RULES = [
+  { key: 'rounds', label: 'Ronde dimainkan', per: 5 },
+  { key: 'roundWins', label: 'Ronde dimenangkan', per: 15 },
+  { key: 'games', label: 'Game diselesaikan', per: 40 },
+  { key: 'gameWins', label: 'Game dimenangkan', per: 80 },
+  { key: 'flowers', label: 'Bunga dikumpulkan', per: 3 },
+  { key: 'kongs', label: 'Kong dibentuk', per: 10 },
+  { key: 'bigWinRounds', label: 'Tangan besar', per: 25 },
+  { key: 'limitHands', label: 'Tangan maksimum', per: 120 },
+];
+const ACH_XP = { 1: 120, 2: 300, 3: 700, 4: 1600, 5: 4500 };
+
+function computeXp(stats) {
+  const st = stats || EMPTY_STATS;
+  let xp = 0;
+  const lines = [];
+  XP_RULES.forEach((r) => {
+    const n = st[r.key] || 0;
+    if (n > 0) { xp += n * r.per; lines.push({ label: r.label, detail: `${n} × ${r.per}`, xp: n * r.per }); }
+  });
+  let achXp = 0, achCount = 0;
+  ACHIEVEMENTS.forEach((a) => {
+    if (achievementState(a, st).unlocked) { achXp += ACH_XP[a.tier]; achCount += 1; }
+  });
+  if (achXp > 0) { xp += achXp; lines.push({ label: 'Pencapaian terbuka', detail: `${achCount} pencapaian`, xp: achXp }); }
+  return { xp, lines };
+}
+
+/* 10 keluarga karakter, tiap keluarga menaungi 10 level. */
+const FAMILIES = [
+  { art: 'tile', cn: '麻', name: 'Roh Ubin' },
+  { art: 'sparrow', cn: '雀', name: 'Pipit' },
+  { art: 'blossom', cn: '花', name: 'Peri Bunga' },
+  { art: 'luckycat', cn: '招', name: 'Kucing Hoki' },
+  { art: 'koi', cn: '鯉', name: 'Koi' },
+  { art: 'mask', cn: '面', name: 'Topeng Opera' },
+  { art: 'lion', cn: '獅', name: 'Singa Penjaga' },
+  { art: 'tiger', cn: '虎', name: 'Harimau' },
+  { art: 'phoenix', cn: '鳳', name: 'Phoenix' },
+  { art: 'dragon', cn: '龍', name: 'Naga' },
+];
+
+/* 10 tingkatan hiasan di dalam tiap keluarga. */
+const VARIANTS = [
+  { word: 'Muda', acc: null, pal: 0 },
+  { word: 'Terlatih', acc: 'ribbon', pal: 1 },
+  { word: 'Perunggu', acc: 'ribbon', pal: 2 },
+  { word: 'Perak', acc: 'sparkle', pal: 3 },
+  { word: 'Emas', acc: 'sparkle', pal: 4 },
+  { word: 'Bercahaya', acc: 'halo', pal: 5 },
+  { word: 'Bertanduk', acc: 'horns', pal: 6 },
+  { word: 'Bermahkota', acc: 'crown', pal: 7 },
+  { word: 'Berapi', acc: 'flame', pal: 8 },
+  { word: 'Agung', acc: 'divine', pal: 9 },
+];
+
+const LEVEL_PALETTES = [
+  ['#7c8a80', '#4f594f'], ['#6f8a7a', '#41564a'], ['#b87333', '#7a4a1c'],
+  ['#b9c2c6', '#78838a'], ['#dcae4c', '#8f6a17'], ['#7fb7c9', '#3e6d80'],
+  ['#8a5fa8', '#4f3070'], ['#c8493b', '#7d1f14'], ['#e07a2a', '#8c3f08'],
+  ['#d8b24c', '#7a1f14'],
+];
+
+function characterFor(level) {
+  const L = Math.max(1, Math.min(MAX_LEVEL, level));
+  const famIdx = Math.min(FAMILIES.length - 1, Math.floor((L - 1) / 10));
+  const varIdx = Math.min(VARIANTS.length - 1, (L - 1) % 10);
+  const fam = FAMILIES[famIdx], v = VARIANTS[varIdx];
+  return {
+    level: L, art: fam.art, acc: v.acc, pal: LEVEL_PALETTES[v.pal],
+    cn: fam.cn, title: `${fam.cn} ${fam.name} ${v.word}`,
+    isMax: L >= MAX_LEVEL,
+  };
 }
 
 /* ============================ PANGKAT & PENCAPAIAN ============================ */
@@ -958,7 +1141,7 @@ function WinnerHandBox({ entry, names, unit }) {
 }
 
 /* ============================ MESIN PERHITUNGAN RONDE ============================ */
-const APP_BUILD = 'v14';
+const APP_BUILD = 'v16';
 const WIND_GLYPH = ['東', '南', '西', '北'];
 const DIE_PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
@@ -2040,6 +2223,8 @@ Balas HANYA JSON, tanpa markdown:
   const nameKey = (n) => String(n || '').trim().toLowerCase();
   const statsFor = (n) => playerStats[nameKey(n)] || EMPTY_STATS;
   const titleOf = (n) => titles[nameKey(n)] || null;
+  const xpOf = (n) => computeXp(statsFor(n)).xp;
+  const levelOf = (n) => levelFromXp(xpOf(n)).level;
 
   function equipTitle(name, id) {
     const k = nameKey(name);
@@ -2282,12 +2467,10 @@ Balas HANYA JSON, tanpa markdown:
             {leaderboardData.map((p, i) => (
               <div key={p.name + i} className="mj-lb-row mj-lb-row-full">
                 <span className={'mj-lb-rank' + (i < 3 ? ' medal medal-' + i : '')}>{i + 1}</span>
-                <Avatar name={p.name} size={30} title={titleOf(p.name)} />
+                <Avatar name={p.name} size={30} level={levelOf(p.name)} />
                 <div className="mj-lb-info">
                   <span className="mj-lb-name">{p.name}</span>
-                  <span className="mj-lb-sub">
-                    {titleOf(p.name) ? achievementById(titleOf(p.name)).title + ' · ' : ''}{p.gamesPlayed} game
-                  </span>
+                  <span className="mj-lb-sub">Lv {levelOf(p.name)} · {characterFor(levelOf(p.name)).title}</span>
                 </div>
                 <span className={'mj-lb-points' + (p.totalPoints < 0 ? ' negative' : ' positive')}>
                   {p.totalPoints > 0 ? '+' : ''}{p.totalPoints}</span>
@@ -2986,11 +3169,14 @@ Balas HANYA JSON, tanpa markdown:
   }
 
 
-  /* -------------------- PANGKAT & PENCAPAIAN -------------------- */
+  /* -------------------- LEVEL, PENCAPAIAN & KARAKTER -------------------- */
   if (view === 'achievements') {
     const who = achPlayer || (profile && profile.name) || (Object.values(playerStats)[0] || {}).name || '';
     const st = statsFor(who);
-    const equipped = titleOf(who);
+    const xpInfo = computeXp(st);
+    const lv = levelFromXp(xpInfo.xp);
+    const ch = characterFor(lv.level);
+    const nextCh = lv.level < MAX_LEVEL ? characterFor(lv.level + 1) : null;
     const allNames = Array.from(new Set([
       ...(profile ? [profile.name] : []),
       ...Object.values(playerStats).map((p) => p.name),
@@ -3003,7 +3189,7 @@ Balas HANYA JSON, tanpa markdown:
         <style>{CSS}</style>
         <div className="mj-page">
           <button className="mj-back-btn" onClick={() => setView('profile')}>← Profil</button>
-          <div className="mj-page-title">Pangkat & Pencapaian</div>
+          <div className="mj-page-title">Level & Karakter</div>
 
           {allNames.length > 1 && (
             <div className="mj-card">
@@ -3016,53 +3202,95 @@ Balas HANYA JSON, tanpa markdown:
             </div>
           )}
 
-          <div className="mj-card mj-ach-hero">
-            <Avatar name={who} size={72} title={equipped} />
-            <div>
-              <div className="mj-ach-name">{who || 'Belum ada pemain'}</div>
-              {equipped ? (
-                <div className="mj-ach-equipped" style={{ color: TIERS[achievementById(equipped).tier].color }}>
-                  {achievementById(equipped).cn} · {achievementById(equipped).title}
-                </div>
-              ) : (
-                <div className="mj-ach-equipped none">Belum memasang pangkat</div>
-              )}
-              <div className="mj-ach-count">{unlocked.length} dari {ACHIEVEMENTS.length} pencapaian terbuka</div>
+          <div className="mj-card mj-lv-hero">
+            <Avatar name={who} size={86} level={lv.level} />
+            <div className="mj-lv-info">
+              <div className="mj-lv-num">Level {lv.level}<span className="mj-lv-max">/{MAX_LEVEL}</span></div>
+              <div className="mj-lv-title">{ch.title}</div>
+              <div className="mj-lv-bar">
+                <span style={{ width: lv.pct + '%' }} />
+              </div>
+              <div className="mj-lv-xp">
+                {lv.level >= MAX_LEVEL
+                  ? `${xpInfo.xp.toLocaleString('id-ID')} XP · level tertinggi`
+                  : `${lv.into.toLocaleString('id-ID')} / ${lv.need.toLocaleString('id-ID')} XP menuju Lv ${lv.level + 1}`}
+              </div>
             </div>
           </div>
 
-          <div className="mj-ach-progress">
-            <div className="mj-ach-bar"><span style={{ width: (unlocked.length / ACHIEVEMENTS.length * 100) + '%' }} /></div>
+          {nextCh && (
+            <div className="mj-card mj-next-card">
+              <div className="mj-label" style={{ marginBottom: 10 }}>Karakter berikutnya</div>
+              <div className="mj-next-row">
+                <Avatar name={who} size={52} level={lv.level + 1} />
+                <div>
+                  <div className="mj-next-title">{nextCh.title}</div>
+                  <div className="mj-next-sub">Terbuka di Level {lv.level + 1}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mj-card">
+            <div className="mj-label">Dari Mana XP-nya</div>
+            {xpInfo.lines.length === 0 ? (
+              <div className="mj-ledger-none">Belum ada XP. Mainkan satu game dulu.</div>
+            ) : xpInfo.lines.map((l, i) => (
+              <div key={i} className="mj-concl-line">
+                <span>{l.label}<span className="mj-xp-detail">{l.detail}</span></span>
+                <span>+{l.xp.toLocaleString('id-ID')}</span>
+              </div>
+            ))}
+            <div className="mj-concl-line total"><span>Total XP</span><span>{xpInfo.xp.toLocaleString('id-ID')}</span></div>
           </div>
 
+          <div className="mj-lv-section">Galeri 100 Karakter</div>
+          <div className="mj-gallery">
+            {Array.from({ length: MAX_LEVEL }).map((_, i) => {
+              const L = i + 1;
+              const owned = L <= lv.level;
+              const c = characterFor(L);
+              return (
+                <div key={L} className={'mj-gal-item' + (owned ? ' owned' : '')}
+                  title={`Lv ${L} · ${c.title}`}
+                  onClick={() => showToast(`Lv ${L} · ${c.title}${owned ? '' : ' (belum terbuka)'}`)}>
+                  {owned ? (
+                    <svg width="38" height="38" viewBox="0 0 48 48">
+                      <defs>
+                        <linearGradient id={'gl' + L} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={c.pal[0]} /><stop offset="100%" stopColor={c.pal[1]} />
+                        </linearGradient>
+                      </defs>
+                      <circle cx="24" cy="24" r="23" fill={'url(#gl' + L + ')'} />
+                      <AvatarArt art={c.art} />
+                      <AvatarAcc acc={c.acc} />
+                    </svg>
+                  ) : (
+                    <span className="mj-gal-lock">{L}</span>
+                  )}
+                  <span className="mj-gal-lv">{L}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mj-lv-section">Pencapaian ({unlocked.length}/{ACHIEVEMENTS.length})</div>
           {[1, 2, 3, 4, 5].map((t) => {
             const list = ACHIEVEMENTS.filter((a) => a.tier === t);
             return (
               <div key={t} className="mj-ach-tier">
                 <div className="mj-ach-tier-head" style={{ color: TIERS[t].color }}>
                   {TIERS[t].label}
-                  <span className="mj-ach-tier-count">
-                    {list.filter((a) => achievementState(a, st).unlocked).length}/{list.length}
-                  </span>
+                  <span className="mj-ach-tier-count">+{ACH_XP[t].toLocaleString('id-ID')} XP each</span>
                 </div>
                 {list.map((a) => {
                   const s2 = achievementState(a, st);
-                  const isOn = equipped === a.id;
                   return (
                     <div key={a.id} className={'mj-ach-card' + (s2.unlocked ? ' unlocked t' + t : ' locked')}>
-                      <div className={'mj-ach-art' + (s2.unlocked ? '' : ' hidden')}
-                        style={s2.unlocked ? { borderColor: TIERS[t].color } : {}}>
-                        {s2.unlocked ? (
-                          <svg width="42" height="42" viewBox="0 0 48 48">
-                            <defs>
-                              <linearGradient id={'ag' + a.id} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={TIERS[t].grad[0]} /><stop offset="100%" stopColor={TIERS[t].grad[1]} />
-                              </linearGradient>
-                            </defs>
-                            <circle cx="24" cy="24" r="23" fill={'url(#ag' + a.id + ')'} />
-                            <AvatarArt art={a.art} />
-                          </svg>
-                        ) : <span className="mj-ach-lock">?</span>}
+                      <div className="mj-ach-art" style={s2.unlocked ? { borderColor: TIERS[t].color } : {}}>
+                        <span className="mj-ach-glyph" style={s2.unlocked ? { color: TIERS[t].color } : {}}>
+                          {s2.unlocked ? a.badge : '?'}
+                        </span>
                       </div>
                       <div className="mj-ach-body">
                         <div className="mj-ach-title">{a.name}</div>
@@ -3073,17 +3301,10 @@ Balas HANYA JSON, tanpa markdown:
                             <span className="mj-ach-prog-num">{s2.cur}/{s2.target}</span>
                           </div>
                         )}
-                        {s2.unlocked && (
-                          <div className="mj-ach-reward" style={{ color: TIERS[t].color }}>
-                            Pangkat: {a.cn} {a.title}
-                          </div>
-                        )}
                       </div>
-                      {s2.unlocked && who && (
-                        <button className={'mj-ach-equip' + (isOn ? ' on' : '')} onClick={() => equipTitle(who, a.id)}>
-                          {isOn ? 'Dipakai' : 'Pakai'}
-                        </button>
-                      )}
+                      <div className={'mj-ach-xp' + (s2.unlocked ? ' on' : '')}>
+                        +{ACH_XP[t].toLocaleString('id-ID')}
+                      </div>
                     </div>
                   );
                 })}
@@ -3092,7 +3313,8 @@ Balas HANYA JSON, tanpa markdown:
           })}
 
           <div className="mj-disclaimer">
-            Pencapaian dihitung dari riwayat game yang tersimpan di perangkat ini saja. Kalau riwayat dihapus, hitungannya ikut mundur.
+            Level dihitung ulang dari riwayat game di perangkat ini. Kalau riwayat dihapus, level ikut turun.
+            Kebutuhan XP naik tiap level — dari {xpForLevel(1)} XP di awal sampai {xpForLevel(99).toLocaleString('id-ID')} XP untuk level terakhir.
           </div>
         </div>
         {renderNav('profile')}
@@ -3141,11 +3363,11 @@ Balas HANYA JSON, tanpa markdown:
           <div className="mj-card mj-ach-entry" onClick={() => { setAchPlayer(profile ? profile.name : null); setView('achievements'); }}>
             <div className="mj-row-between" style={{ marginBottom: 0 }}>
               <div>
-                <div className="mj-continue-title">Pangkat & Pencapaian</div>
+                <div className="mj-continue-title">Level & Karakter</div>
                 <div className="mj-continue-sub">
                   {profile
-                    ? `${unlockedList(statsFor(profile.name)).length}/${ACHIEVEMENTS.length} terbuka`
-                    : 'Isi nama dulu untuk mulai mengumpulkan'}
+                    ? `Lv ${levelOf(profile.name)} · ${characterFor(levelOf(profile.name)).title}`
+                    : 'Isi nama dulu untuk mulai naik level'}
                 </div>
               </div>
               <div className="mj-continue-arrow">→</div>
@@ -3247,13 +3469,9 @@ Balas HANYA JSON, tanpa markdown:
                       onClick={(e) => { e.stopPropagation(); buzz(18); openAddRound(undefined, i); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openAddRound(undefined, i); } }}>和</span>
                     <Avatar name={p.name} size={vw >= 1100 ? 72 : vw >= 820 ? 60 : 44} wind={seatWindOf(i, game.dealerIdx)}
-                      dealer={i === game.dealerIdx} title={titleOf(p.name)} />
+                      dealer={i === game.dealerIdx} level={levelOf(p.name)} />
                     <span className="mj-player-name">{p.name}</span>
-                    {titleOf(p.name) && (
-                      <span className="mj-player-title" style={{ color: TIERS[achievementById(titleOf(p.name)).tier].grad[1] }}>
-                        {achievementById(titleOf(p.name)).title}
-                      </span>
-                    )}
+                    <span className="mj-player-title">Lv {levelOf(p.name)} · {characterFor(levelOf(p.name)).cn}</span>
                     <span className={'mj-player-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')
                       + (floaters.some((f) => f.seat === i) ? ' bump' : '')}>
                       {p.score > 0 ? '+' : ''}{p.score}
@@ -3438,7 +3656,7 @@ Balas HANYA JSON, tanpa markdown:
               <div className="mj-sheet-handle" />
               <div className="mj-quick-head">
                 <Avatar name={game.players[quickPlayer].name} size={52} wind={seatWindOf(quickPlayer, game.dealerIdx)}
-                  dealer={quickPlayer === game.dealerIdx} title={titleOf(game.players[quickPlayer].name)} />
+                  dealer={quickPlayer === game.dealerIdx} level={levelOf(game.players[quickPlayer].name)} />
                 <div>
                   <div className="mj-quick-name">{game.players[quickPlayer].name}</div>
                   <div className="mj-quick-sub">
@@ -4200,6 +4418,37 @@ const CSS = `
   align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:rgba(243,236,218,0.06);}
 .mj-ach-art.hidden{background:rgba(243,236,218,0.05);}
 .mj-ach-lock{font-family:'Noto Serif TC',serif;font-size:18px;opacity:0.4;font-weight:700;}
+
+.mj-avatar-lv{position:absolute;bottom:-3px;left:-4px;background:var(--felt-shadow);border:1.5px solid var(--gold);
+  color:var(--gold);font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;min-width:17px;height:17px;
+  padding:0 3px;border-radius:9px;display:flex;align-items:center;justify-content:center;line-height:1;}
+.mj-lv-hero{display:flex;align-items:center;gap:16px;}
+.mj-lv-info{flex:1;min-width:0;}
+.mj-lv-num{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;color:var(--gold);line-height:1;}
+.mj-lv-max{font-size:13px;opacity:0.5;}
+.mj-lv-title{font-family:'Noto Serif TC',serif;font-size:14px;font-weight:700;margin:4px 0 8px;}
+.mj-lv-bar{height:7px;background:rgba(243,236,218,0.12);border-radius:4px;overflow:hidden;}
+.mj-lv-bar span{display:block;height:100%;background:linear-gradient(90deg,#5b8c69,#c79a3b);border-radius:4px;transition:width .5s ease;}
+.mj-lv-xp{font-family:'IBM Plex Mono',monospace;font-size:10.5px;opacity:0.6;margin-top:5px;}
+.mj-next-card{border-color:rgba(199,154,59,0.4);}
+.mj-next-row{display:flex;align-items:center;gap:12px;}
+.mj-next-title{font-family:'Noto Serif TC',serif;font-size:14px;font-weight:700;color:var(--gold);}
+.mj-next-sub{font-size:11.5px;opacity:0.6;margin-top:2px;}
+.mj-xp-detail{display:block;font-size:10px;opacity:0.5;font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+.mj-lv-section{font-family:'Noto Serif TC',serif;font-size:15px;font-weight:700;color:var(--gold);margin:20px 0 10px;}
+.mj-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:7px;margin-bottom:6px;}
+.mj-gal-item{position:relative;aspect-ratio:1;border-radius:12px;background:rgba(243,236,218,0.05);
+  border:1px solid rgba(243,236,218,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.mj-gal-item.owned{background:rgba(243,236,218,0.09);border-color:rgba(199,154,59,0.35);}
+.mj-gal-lock{font-family:'IBM Plex Mono',monospace;font-size:12px;opacity:0.28;font-weight:700;}
+.mj-gal-lv{position:absolute;bottom:2px;right:4px;font-family:'IBM Plex Mono',monospace;font-size:8px;opacity:0.5;}
+.mj-gal-item.owned .mj-gal-lv{opacity:0.85;color:var(--gold);}
+.mj-ach-glyph{font-family:'Noto Serif TC',serif;font-size:17px;font-weight:700;opacity:0.85;}
+.mj-ach-xp{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;opacity:0.35;flex-shrink:0;}
+.mj-ach-xp.on{opacity:1;color:var(--bamboo);}
+@media (min-width:820px){
+  .mj-gallery{grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:9px;}
+}
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
 .mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
