@@ -117,15 +117,144 @@ function tileLabel(code) {
   return `${n} ${TILE_NAME[s]}`;
 }
 
+
+/* ============================ WAJAH UBIN (SVG) ============================ */
+const CN_NUM = ['', '\u4e00', '\u4e8c', '\u4e09', '\u56db', '\u4e94', '\u516d', '\u4e03', '\u516b', '\u4e5d'];
+const TC = { red: '#c0392b', green: '#1e7a4c', blue: '#1f4e8c', ink: '#23201a' };
+
+const PIN_LAYOUT = {
+  1: [[50, 50, 'big']],
+  2: [[50, 30, TC.green], [50, 70, TC.blue]],
+  3: [[26, 24, TC.blue], [50, 50, TC.green], [74, 76, TC.red]],
+  4: [[31, 31, TC.blue], [69, 31, TC.green], [31, 69, TC.green], [69, 69, TC.blue]],
+  5: [[28, 28, TC.blue], [72, 28, TC.green], [50, 50, TC.red], [28, 72, TC.green], [72, 72, TC.blue]],
+  6: [[31, 24, TC.green], [69, 24, TC.green], [31, 50, TC.green], [69, 50, TC.green], [31, 76, TC.blue], [69, 76, TC.blue]],
+  7: [[26, 20, TC.green], [50, 28, TC.green], [74, 36, TC.green], [31, 62, TC.red], [69, 62, TC.red], [31, 82, TC.red], [69, 82, TC.red]],
+  8: [[33, 18, TC.blue], [67, 18, TC.blue], [33, 39, TC.blue], [67, 39, TC.blue], [33, 61, TC.blue], [67, 61, TC.blue], [33, 82, TC.blue], [67, 82, TC.blue]],
+  9: [[24, 22, TC.red], [50, 22, TC.red], [76, 22, TC.red], [24, 50, TC.green], [50, 50, TC.green], [76, 50, TC.green], [24, 78, TC.blue], [50, 78, TC.blue], [76, 78, TC.blue]],
+};
+
+const SOU_LAYOUT = {
+  2: [[50, 28, TC.green], [50, 72, TC.green]],
+  3: [[50, 24, TC.green], [30, 70, TC.green], [70, 70, TC.green]],
+  4: [[31, 30, TC.blue], [69, 30, TC.green], [31, 70, TC.green], [69, 70, TC.blue]],
+  5: [[29, 26, TC.green], [71, 26, TC.blue], [50, 50, TC.red], [29, 74, TC.blue], [71, 74, TC.green]],
+  6: [[26, 30, TC.green], [50, 30, TC.green], [74, 30, TC.green], [26, 72, TC.blue], [50, 72, TC.blue], [74, 72, TC.blue]],
+  7: [[50, 18, TC.red], [26, 52, TC.green], [50, 52, TC.green], [74, 52, TC.green], [26, 82, TC.green], [50, 82, TC.green], [74, 82, TC.green]],
+  8: [[30, 22, TC.green], [70, 22, TC.green], [36, 46, TC.green], [64, 46, TC.green], [36, 66, TC.green], [64, 66, TC.green], [30, 88, TC.green], [70, 88, TC.green]],
+  9: [[26, 22, TC.green], [50, 22, TC.green], [74, 22, TC.green], [26, 50, TC.red], [50, 50, TC.red], [74, 50, TC.red], [26, 78, TC.green], [50, 78, TC.green], [74, 78, TC.green]],
+};
+
+function PinDot({ x, y, color, r }) {
+  if (color === 'big') {
+    return (
+      <g>
+        <circle cx={x} cy={y} r="26" fill="none" stroke={TC.blue} strokeWidth="4" />
+        <circle cx={x} cy={y} r="19" fill="none" stroke={TC.green} strokeWidth="3" />
+        <circle cx={x} cy={y} r="11" fill={TC.red} />
+        <circle cx={x} cy={y} r="4" fill="#f7f2e4" />
+      </g>
+    );
+  }
+  return (
+    <g>
+      <circle cx={x} cy={y} r={r} fill={color} />
+      <circle cx={x} cy={y} r={r * 0.42} fill="#f7f2e4" />
+    </g>
+  );
+}
+
+function SouStick({ x, y, color, h }) {
+  const w = h * 0.38;
+  return (
+    <g>
+      <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={w / 2} fill={color} />
+      <rect x={x - w / 2} y={y - h * 0.09} width={w} height={h * 0.18} fill="#f7f2e4" opacity="0.85" />
+      <circle cx={x} cy={y - h / 2} r={w * 0.5} fill={color} />
+      <circle cx={x} cy={y + h / 2} r={w * 0.5} fill={color} />
+    </g>
+  );
+}
+
+function TileFace({ code, size }) {
+  const w = size || 46;
+  const h = Math.round(w * 1.34);
+  const suit = code && code.length === 2 ? code[1] : null;
+  const num = suit ? Number(code[0]) : 0;
+  let content = null;
+
+  if (suit === 'm') {
+    content = (
+      <g>
+        <text x="50" y="42" textAnchor="middle" fontSize="40" fontFamily="'Noto Serif TC',serif" fontWeight="700" fill={TC.blue}>{CN_NUM[num]}</text>
+        <text x="50" y="90" textAnchor="middle" fontSize="42" fontFamily="'Noto Serif TC',serif" fontWeight="700" fill={TC.red}>\u842c</text>
+      </g>
+    );
+  } else if (suit === 'p') {
+    const dots = PIN_LAYOUT[num] || [];
+    const r = num >= 8 ? 9 : num >= 5 ? 10.5 : 12;
+    content = <g>{dots.map((d, i) => <PinDot key={i} x={d[0]} y={d[1]} color={d[2]} r={r} />)}</g>;
+  } else if (suit === 's') {
+    if (num === 1) {
+      content = (
+        <g>
+          <ellipse cx="50" cy="46" rx="17" ry="23" fill={TC.green} />
+          <circle cx="50" cy="26" r="10" fill={TC.green} />
+          <circle cx="46" cy="24" r="2.6" fill="#f7f2e4" />
+          <path d="M58 26 L70 22 L58 32 Z" fill={TC.red} />
+          <path d="M50 66 L38 92 M50 66 L62 92" stroke={TC.red} strokeWidth="5" strokeLinecap="round" />
+          <path d="M34 46 q-14 10 -6 22" stroke={TC.green} strokeWidth="4" fill="none" strokeLinecap="round" />
+        </g>
+      );
+    } else {
+      const sticks = SOU_LAYOUT[num] || [];
+      const sh = num >= 8 ? 19 : num >= 6 ? 24 : 30;
+      content = <g>{sticks.map((d, i) => <SouStick key={i} x={d[0]} y={d[1]} color={d[2]} h={sh} />)}</g>;
+    }
+  } else if (code === 'RD') {
+    content = <text x="50" y="74" textAnchor="middle" fontSize="58" fontFamily="'Noto Serif TC',serif" fontWeight="700" fill={TC.red}>\u4e2d</text>;
+  } else if (code === 'GD') {
+    content = <text x="50" y="74" textAnchor="middle" fontSize="54" fontFamily="'Noto Serif TC',serif" fontWeight="700" fill={TC.green}>\u767c</text>;
+  } else if (code === 'WD') {
+    content = <rect x="22" y="18" width="56" height="68" rx="4" fill="none" stroke={TC.blue} strokeWidth="5" />;
+  } else if (['E', 'S', 'W', 'N'].includes(code)) {
+    const ch = { E: '\u6771', S: '\u5357', W: '\u897f', N: '\u5317' }[code];
+    content = <text x="50" y="74" textAnchor="middle" fontSize="56" fontFamily="'Noto Serif TC',serif" fontWeight="700" fill={TC.ink}>{ch}</text>;
+  } else {
+    content = <text x="50" y="70" textAnchor="middle" fontSize="46" fill="#999">?</text>;
+  }
+
+  const uid = 'tf' + String(code).replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <svg className="mj-tileface" width={w} height={h} viewBox="0 0 100 134">
+      <defs>
+        <linearGradient id={uid + 'body'} x1="0" y1="0" x2="0.35" y2="1">
+          <stop offset="0%" stopColor="#fffdf6" /><stop offset="55%" stopColor="#f6efdd" /><stop offset="100%" stopColor="#e6dcc2" />
+        </linearGradient>
+        <linearGradient id={uid + 'face'} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fffefa" /><stop offset="100%" stopColor="#f4ecd8" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="10" width="96" height="122" rx="12" fill="#bfb08c" />
+      <rect x="2" y="6" width="96" height="122" rx="12" fill="#d5c8a5" />
+      <rect x="2" y="0" width="96" height="124" rx="12" fill={'url(#' + uid + 'body)'} />
+      <rect x="8" y="6" width="84" height="112" rx="9" fill={'url(#' + uid + 'face)'} stroke="#ded3b7" strokeWidth="1" />
+      <path d="M13 9 q22 -4 40 0 l0 5 q-20 -4 -40 0 Z" fill="#ffffff" opacity="0.5" />
+      <g transform="translate(8,10) scale(0.84,0.82)">{content}</g>
+    </svg>
+  );
+}
+
 function Tiles({ hand, size, onTileClick, flags }) {
+  const px = size === 'sm' ? 38 : size === 'lg' ? 60 : 48;
   return (
     <div className={'mj-hand' + (size === 'sm' ? ' sm' : '')}>
       {hand.map((t, i) => (
         <span key={i}
-          className={'mj-tile-glyph' + (onTileClick ? ' clickable' : '') + (flags && flags.includes(i) ? ' unsure' : '')}
+          className={'mj-tile-slot' + (onTileClick ? ' clickable' : '') + (flags && flags.includes(i) ? ' unsure' : '')}
           title={tileLabel(t) + (flags && flags.includes(i) ? ' — perlu dicek' : '')}
           onClick={onTileClick ? () => onTileClick(i) : undefined}>
-          {TILE_GLYPH[t] || '?'}
+          <TileFace code={t} size={px} />
         </span>
       ))}
     </div>
@@ -380,6 +509,7 @@ function Mascot({ mood, line, small }) {
 }
 
 /* ============================ MESIN PERHITUNGAN RONDE ============================ */
+const APP_BUILD = 'v10';
 const WIND_GLYPH = ['東', '南', '西', '北'];
 const DIE_PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
@@ -1479,6 +1609,7 @@ Balas HANYA JSON, tanpa markdown:
               line={game ? `Game ${game.code} masih jalan` : 'Siap main? Ayo kocok ubinnya'} />
             <div className="mj-hero-title">Table Score</div>
             <div className="mj-hero-sub">Host, catat, dan pantau skor mahjong meja kamu</div>
+            <div className="mj-build-line">Build {APP_BUILD}</div>
           </div>
 
           {game && (
@@ -2339,8 +2470,8 @@ Balas HANYA JSON, tanpa markdown:
                     <div className="mj-label">{TILE_NAME[s]}</div>
                     <div className="mj-picker-row">
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                        <button key={n} className="mj-picker-tile" onClick={() => editTiles([...scanTiles, `${n}${s}`])}>
-                          {TILE_GLYPH[`${n}${s}`]}
+                        <button key={n} className="mj-picker-tile" onClick={() => { buzz(10); editTiles([...scanTiles, `${n}${s}`]); }}>
+                          <TileFace code={`${n}${s}`} size={vw >= 820 ? 54 : 44} />
                         </button>
                       ))}
                     </div>
@@ -2350,7 +2481,9 @@ Balas HANYA JSON, tanpa markdown:
                   <div className="mj-label">Angin & Naga</div>
                   <div className="mj-picker-row">
                     {HONOR_ORDER.map((h) => (
-                      <button key={h} className="mj-picker-tile" onClick={() => editTiles([...scanTiles, h])}>{TILE_GLYPH[h]}</button>
+                      <button key={h} className="mj-picker-tile" onClick={() => { buzz(10); editTiles([...scanTiles, h]); }}>
+                        <TileFace code={h} size={vw >= 820 ? 54 : 44} />
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -2466,6 +2599,7 @@ Balas HANYA JSON, tanpa markdown:
           <button className="mj-icon-btn" onClick={goHome} title="Home"><Icon name="home" size={18} /></button>
           <div className={'mj-code-badge' + (game.demo ? ' demo' : '')}>
             {game.demo ? 'DEMO' : `${game.code}`}
+            <span className="mj-build">{APP_BUILD}</span>
           </div>
           <div className="mj-topbar-actions">
             {!game.isHost && <button className="mj-icon-btn" onClick={refreshShared} title="Refresh"><Icon name="refresh" size={17} /></button>}
@@ -3391,6 +3525,8 @@ const CSS = `
   .mj-floater{font-size:26px;}
   .mj-die{width:92px;height:92px;}
 }
+.mj-build{font-size:9.5px;opacity:0.6;margin-left:6px;font-family:'IBM Plex Mono',monospace;}
+.mj-build-line{font-size:10.5px;opacity:0.4;margin-top:6px;font-family:'IBM Plex Mono',monospace;}
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
 .mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
@@ -3404,11 +3540,13 @@ const CSS = `
 .mj-history-rounds{margin-top:10px;border-top:1px solid rgba(243,236,218,0.1);padding-top:10px;display:grid;gap:8px;}
 
 /* tiles */
-.mj-hand{display:flex;flex-wrap:wrap;gap:3px;margin:10px 0;}
-.mj-tile-glyph{background:var(--tile-ivory);color:var(--ink);border-radius:5px;width:30px;height:40px;display:flex;align-items:center;justify-content:center;font-size:26px;line-height:1;box-shadow:0 2px 0 rgba(0,0,0,0.3);user-select:none;}
-.mj-hand.sm .mj-tile-glyph{width:25px;height:33px;font-size:21px;}
-.mj-tile-glyph.clickable{cursor:pointer;}
-.mj-tile-glyph.clickable:active{transform:translateY(2px);box-shadow:0 0 0 rgba(0,0,0,0.3);}
+.mj-hand{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0;}
+.mj-tile-slot{display:inline-flex;line-height:0;border-radius:8px;transition:transform .08s ease;}
+.mj-tileface{display:block;filter:drop-shadow(0 3px 3px rgba(0,0,0,0.35));}
+.mj-tile-slot.clickable{cursor:pointer;}
+.mj-tile-slot.clickable:active{transform:translateY(3px) scale(0.97);}
+.mj-tile-slot.unsure .mj-tileface{filter:drop-shadow(0 0 0 2px var(--gold)) drop-shadow(0 3px 3px rgba(0,0,0,0.35));}
+.mj-tile-slot.unsure{outline:2px solid var(--gold);outline-offset:1px;}
 
 /* guidebook */
 .mj-cat-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
@@ -3510,7 +3648,7 @@ const CSS = `
 .mj-scan-note{font-size:12px;opacity:0.65;background:rgba(199,154,59,0.12);border-left:2px solid var(--gold);padding:8px 10px;border-radius:0 6px 6px 0;margin-top:8px;line-height:1.5;}
 .mj-scan-note.edited{background:rgba(91,140,105,0.15);border-left-color:var(--bamboo);opacity:0.9;}
 .mj-unsure-legend{font-size:11.5px;color:var(--gold);opacity:0.9;margin-top:6px;line-height:1.45;}
-.mj-tile-glyph.unsure{box-shadow:0 2px 0 rgba(0,0,0,0.3),0 0 0 2px var(--gold);}
+
 .mj-tile-actions{display:flex;gap:8px;margin-top:10px;}
 .mj-tile-actions .mj-ghost-btn{flex:1;}
 .mj-result-card{text-align:center;padding:24px 16px;border-color:var(--gold);}
@@ -3527,7 +3665,9 @@ const CSS = `
 .mj-caveat-box{background:rgba(199,154,59,0.12);border:1px solid rgba(199,154,59,0.35);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.55;margin-bottom:14px;}
 .mj-picker-group{margin-bottom:12px;}
 .mj-picker-row{display:flex;flex-wrap:wrap;gap:5px;}
-.mj-picker-tile{background:var(--tile-ivory);color:var(--ink);border:none;border-radius:5px;width:32px;height:42px;font-size:26px;line-height:1;cursor:pointer;box-shadow:0 2px 0 rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;}
+.mj-picker-tile{background:none;border:none;padding:0;line-height:0;cursor:pointer;border-radius:9px;transition:transform .08s ease;}
+.mj-picker-tile:active{transform:translateY(3px) scale(0.96);}
+.mj-picker-row{gap:7px;}
 
 /* playing */
 .mj-topbar{display:flex;align-items:center;justify-content:space-between;max-width:480px;margin:0 auto;padding:16px 14px 18px;}
