@@ -270,6 +270,101 @@ const PATTERNS = [
   },
 ];
 
+
+/* ============================ MESIN PERHITUNGAN RONDE ============================ */
+const WIND_GLYPH = ['東', '南', '西', '北'];
+const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
+
+// Angin duduk pemain i: banker selalu Timur, lalu berlawanan jarum jam.
+function seatWindOf(playerIdx, dealerIdx) {
+  return (playerIdx - dealerIdx + 4) % 4;
+}
+
+function emptyBonus() {
+  return { flowers: 0, kongAn: 0, kongMing: 0 };
+}
+
+/*
+  Menghitung seluruh perpindahan poin dalam satu ronde.
+  Dua model bonus:
+   - 'fan'  : bunga & kong milik PEMENANG menambah nilai tangannya. Milik yang kalah tidak dihitung.
+   - 'side' : bunga & kong siapa pun dibayar langsung oleh tiga pemain lain, terlepas siapa yang menang.
+*/
+function settleRound(cfgGame, input) {
+  const { draw, winnerIdx, method, discarderIdx, handValue, bonuses, winnerExtra } = input;
+  const dealerIdx = cfgGame.dealerIdx;
+  const mode = cfgGame.bonusMode || 'fan';
+  const flowerUnit = Number(cfgGame.flowerUnit) || 0;
+  const kongUnit = Number(cfgGame.kongUnit) || 0;
+  const dealerDoubles = cfgGame.dealerDoubles;
+
+  const deltas = [0, 0, 0, 0];
+  const sideDeltas = [0, 0, 0, 0];
+  const sideLines = [];
+
+  // --- 1. Pembayaran langsung (berlaku juga saat seri, karena terjadi di tengah ronde) ---
+  if (mode === 'side') {
+    for (let i = 0; i < 4; i++) {
+      const b = bonuses[i] || emptyBonus();
+      // kong tertutup dihargai dua kali kong terbuka
+      const units = b.flowers * flowerUnit + b.kongAn * kongUnit * 2 + b.kongMing * kongUnit;
+      if (units <= 0) continue;
+      for (let p = 0; p < 4; p++) {
+        if (p === i) continue;
+        sideDeltas[p] -= units;
+        sideDeltas[i] += units;
+      }
+      sideLines.push({ idx: i, units, flowers: b.flowers, kongAn: b.kongAn, kongMing: b.kongMing });
+    }
+  }
+
+  // --- 2. Nilai tangan pemenang ---
+  let bonusFan = 0;
+  const fanLines = [];
+  if (!draw && winnerIdx !== null && winnerIdx !== undefined) {
+    if (mode === 'fan') {
+      const wb = bonuses[winnerIdx] || emptyBonus();
+      if (wb.flowers > 0) { const v = wb.flowers * flowerUnit; bonusFan += v; fanLines.push({ label: `Bunga ×${wb.flowers}`, value: v }); }
+      if (wb.kongAn > 0) { const v = wb.kongAn * kongUnit * 2; bonusFan += v; fanLines.push({ label: `Kong tertutup ×${wb.kongAn}`, value: v }); }
+      if (wb.kongMing > 0) { const v = wb.kongMing * kongUnit; bonusFan += v; fanLines.push({ label: `Kong terbuka ×${wb.kongMing}`, value: v }); }
+    }
+    const ex = winnerExtra || {};
+    if (ex.seatWind) { bonusFan += 1; fanLines.push({ label: 'Triplet angin duduk (門風)', value: 1 }); }
+    if (ex.roundWind) { bonusFan += 1; fanLines.push({ label: 'Triplet angin putaran (圈風)', value: 1 }); }
+    if (ex.selfDrawBonus && method === 'selfdraw') { bonusFan += 1; fanLines.push({ label: '自摸 Self-draw', value: 1 }); }
+    if (ex.concealed) { bonusFan += 1; fanLines.push({ label: '門前清 Tangan tertutup', value: 1 }); }
+    if (ex.lastTile) { bonusFan += 1; fanLines.push({ label: '海底撈月 Ubin terakhir', value: 1 }); }
+    if (ex.kongBloom) { bonusFan += 1; fanLines.push({ label: '槓上開花 Menang dari ubin kong', value: 1 }); }
+    if (ex.robKong) { bonusFan += 1; fanLines.push({ label: '搶槓 Merampok kong', value: 1 }); }
+  }
+
+  let total = Math.max(0, Number(handValue) || 0) + bonusFan;
+  let cappedAt = null;
+  const limit = MODES[cfgGame.mode] ? MODES[cfgGame.mode].limit : null;
+  if (limit && total > limit) { cappedAt = limit; total = limit; }
+
+  const winLines = [];
+  if (!draw && winnerIdx !== null && winnerIdx !== undefined && total > 0) {
+    const payers = method === 'selfdraw' ? [0, 1, 2, 3].filter((i) => i !== winnerIdx) : [discarderIdx];
+    payers.forEach((p) => {
+      if (p === null || p === undefined) return;
+      let amt = total;
+      let doubled = false;
+      if (dealerDoubles && (winnerIdx === dealerIdx || p === dealerIdx)) { amt *= 2; doubled = true; }
+      deltas[p] -= amt;
+      deltas[winnerIdx] += amt;
+      winLines.push({ from: p, amount: amt, doubled });
+    });
+  }
+
+  const finalDeltas = deltas.map((d, i) => d + sideDeltas[i]);
+  return {
+    deltas: finalDeltas, winDeltas: deltas, sideDeltas,
+    total, baseValue: Math.max(0, Number(handValue) || 0), bonusFan,
+    fanLines, winLines, sideLines, cappedAt, mode,
+  };
+}
+
 /* ============================ PLAYER ROSTER ============================ */
 const PLAYER_ROSTER = [
   'Pi Xiang', 'Marco', 'Aling', 'Carlo', 'Cindy',
@@ -326,7 +421,9 @@ function buildDemoData() {
       deltas.forEach((d, i) => { scores[i] += d; });
       rounds.unshift({
         id: gi * 1000 + r, roundNum: r, draw: isDraw, winnerIdx, method, discarderIdx,
-        value, dealerIdx: g.dealerIdx, deltas,
+        value, baseValue: value, bonusFan: 0, dealerIdx: g.dealerIdx, roundWind: 0,
+        bonuses: [emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()],
+        winDeltas: [...deltas], sideDeltas: [0, 0, 0, 0], deltas,
       });
       if (!isDraw) {
         if (winnerIdx === g.dealerIdx) g.streak += 1;
@@ -383,7 +480,9 @@ function buildDemoData() {
     liveRounds.unshift({
       id: 990000 + i, roundNum: i + 1, draw: !!s.draw, winnerIdx: s.draw ? null : s.w,
       method: s.draw ? null : s.m, discarderIdx: s.draw ? null : s.d, value: s.draw ? 0 : s.v,
-      dealerIdx: dIdx, deltas,
+      dealerIdx: dIdx, roundWind: 0, baseValue: s.draw ? 0 : s.v, bonusFan: 0,
+      bonuses: [emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()],
+      winDeltas: deltas, sideDeltas: [0, 0, 0, 0], deltas,
     });
     if (!s.draw) {
       if (s.w === dIdx) strk += 1; else { dIdx = (dIdx + 1) % 4; strk = 1; }
@@ -394,7 +493,9 @@ function buildDemoData() {
     demo: true, code: 'DEMO0', isHost: true, mode: 'hongkong', unit: cfg.unit,
     players: livePlayers.map((n, i) => ({ name: n, score: liveScores[i] })),
     startingScore: cfg.startingScore, dealerIdx: dIdx, streak: strk,
-    round: scripted.length + 1, dealerDoubles: true, dealerKeepsSeat: true, history: liveRounds,
+    round: scripted.length + 1, dealerDoubles: true, dealerKeepsSeat: true,
+    bonusMode: 'fan', flowerUnit: 1, kongUnit: 1, roundWind: 0, dealerPasses: 3,
+    history: liveRounds,
   };
 
   return { records, statsMap, activeGame };
@@ -525,6 +626,9 @@ function MahjongApp() {
   const [startingScore, setStartingScore] = useState(MODES.hongkong.startingScore);
   const [dealerDoubles, setDealerDoubles] = useState(true);
   const [dealerKeepsSeat, setDealerKeepsSeat] = useState(true);
+  const [bonusMode, setBonusMode] = useState('fan');
+  const [flowerUnit, setFlowerUnit] = useState(1);
+  const [kongUnit, setKongUnit] = useState(1);
 
   const [activeSlot, setActiveSlot] = useState(0);
   const [demoOn, setDemoOn] = useState(false);
@@ -542,6 +646,9 @@ function MahjongApp() {
   const [formMethod, setFormMethod] = useState('selfdraw');
   const [formDiscarder, setFormDiscarder] = useState(null);
   const [formValue, setFormValue] = useState('');
+  const [roundStep, setRoundStep] = useState(1);
+  const [formBonuses, setFormBonuses] = useState([emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()]);
+  const [formExtra, setFormExtra] = useState({});
 
   // guidebook
   const [guideMode, setGuideMode] = useState('hongkong');
@@ -674,7 +781,9 @@ function MahjongApp() {
       code: genCode(), isHost: true, mode, unit: cfg.unit,
       players: names.map((n) => ({ name: n, score: Number(startingScore) || 0 })),
       startingScore: Number(startingScore) || 0,
-      dealerIdx: 0, streak: 1, round: 1, dealerDoubles, dealerKeepsSeat, history: [],
+      dealerIdx: 0, streak: 1, round: 1, dealerDoubles, dealerKeepsSeat,
+      bonusMode, flowerUnit: Number(flowerUnit) || 0, kongUnit: Number(kongUnit) || 0,
+      roundWind: 0, dealerPasses: 0, history: [],
     });
     setGuideMode(mode); setScanMode(mode);
     setView('playing');
@@ -717,31 +826,75 @@ function MahjongApp() {
   function openAddRound(prefillValue) {
     setFormDraw(false); setFormWinner(null); setFormMethod('selfdraw'); setFormDiscarder(null);
     setFormValue(prefillValue !== undefined ? String(prefillValue) : '');
+    setFormBonuses([emptyBonus(), emptyBonus(), emptyBonus(), emptyBonus()]);
+    setFormExtra({});
+    setRoundStep(1);
     setShowAddRound(true);
+  }
+
+  function setBonus(idx, key, val) {
+    const next = formBonuses.map((b, i) => (i === idx ? { ...b, [key]: Math.max(0, val) } : b));
+    setFormBonuses(next);
+  }
+
+  function currentSettlement() {
+    if (!game) return null;
+    return settleRound(game, {
+      draw: formDraw,
+      winnerIdx: formDraw ? null : formWinner,
+      method: formMethod,
+      discarderIdx: formDiscarder,
+      handValue: Number(formValue) || 0,
+      bonuses: formBonuses,
+      winnerExtra: formExtra,
+    });
   }
 
   function confirmRound() {
     if (!game) return;
-    let deltas = [0, 0, 0, 0];
-    let winnerIdx = null, method = null, discarderIdx = null, value = 0;
     if (!formDraw) {
       if (formWinner === null) return;
-      value = Number(formValue);
-      if (!value || value <= 0) return;
+      if (!(Number(formValue) > 0)) return;
       if (formMethod === 'discard' && formDiscarder === null) return;
-      winnerIdx = formWinner; method = formMethod; discarderIdx = formDiscarder;
-      deltas = computeDeltas(game, winnerIdx, method, discarderIdx, value);
     }
-    const newPlayers = game.players.map((p, i) => ({ ...p, score: p.score + deltas[i] }));
+    const st = currentSettlement();
+    if (!st) return;
+
+    const newPlayers = game.players.map((p, i) => ({ ...p, score: p.score + st.deltas[i] }));
+
     let newDealerIdx = game.dealerIdx, newStreak = game.streak;
+    let newRoundWind = game.roundWind || 0, newPasses = game.dealerPasses || 0;
     if (!formDraw) {
-      if (winnerIdx === game.dealerIdx) {
+      if (formWinner === game.dealerIdx) {
         if (game.dealerKeepsSeat) newStreak = game.streak + 1;
-        else { newDealerIdx = (game.dealerIdx + 1) % 4; newStreak = 1; }
-      } else { newDealerIdx = (game.dealerIdx + 1) % 4; newStreak = 1; }
+        else { newDealerIdx = (game.dealerIdx + 1) % 4; newStreak = 1; newPasses += 1; }
+      } else {
+        newDealerIdx = (game.dealerIdx + 1) % 4; newStreak = 1; newPasses += 1;
+      }
+      if (newPasses > 0 && newPasses % 4 === 0 && newPasses !== (game.dealerPasses || 0)) {
+        newRoundWind = Math.min(3, (game.roundWind || 0) + 1);
+      }
     }
-    const entry = { id: Date.now(), roundNum: game.round, draw: formDraw, winnerIdx, method, discarderIdx, value, dealerIdx: game.dealerIdx, deltas };
-    setGame({ ...game, players: newPlayers, dealerIdx: newDealerIdx, streak: newStreak, round: game.round + 1, history: [entry, ...game.history] });
+
+    const entry = {
+      id: Date.now(), roundNum: game.round, draw: formDraw,
+      winnerIdx: formDraw ? null : formWinner,
+      method: formDraw ? null : formMethod,
+      discarderIdx: formDraw ? null : formDiscarder,
+      value: st.total, baseValue: st.baseValue, bonusFan: st.bonusFan,
+      dealerIdx: game.dealerIdx, roundWind: game.roundWind || 0,
+      bonuses: formBonuses.map((b) => ({ ...b })),
+      extra: { ...formExtra },
+      fanLines: st.fanLines, sideLines: st.sideLines, winLines: st.winLines,
+      cappedAt: st.cappedAt, bonusMode: st.mode,
+      deltas: st.deltas, winDeltas: st.winDeltas, sideDeltas: st.sideDeltas,
+    };
+
+    setGame({
+      ...game, players: newPlayers, dealerIdx: newDealerIdx, streak: newStreak,
+      roundWind: newRoundWind, dealerPasses: newPasses,
+      round: game.round + 1, history: [entry, ...game.history],
+    });
     setShowAddRound(false);
   }
 
@@ -749,7 +902,12 @@ function MahjongApp() {
     if (!game || game.history.length === 0) return;
     const [last, ...rest] = game.history;
     const reverted = game.players.map((p, i) => ({ ...p, score: p.score - last.deltas[i] }));
-    setGame({ ...game, players: reverted, dealerIdx: last.dealerIdx, round: game.round - 1, history: rest });
+    setGame({
+      ...game, players: reverted, dealerIdx: last.dealerIdx,
+      roundWind: last.roundWind !== undefined ? last.roundWind : (game.roundWind || 0),
+      dealerPasses: Math.max(0, (game.dealerPasses || 0) - (last.draw ? 0 : 1)),
+      round: game.round - 1, history: rest,
+    });
   }
 
   function finishGame(save) {
@@ -1181,6 +1339,27 @@ Balas HANYA JSON, tanpa markdown:
                 <input type="checkbox" checked={dealerKeepsSeat} onChange={(e) => setDealerKeepsSeat(e.target.checked)} /></label>
             </div>
           </div>
+          <div className="mj-card">
+            <div className="mj-label">Aturan Bunga & Kong</div>
+            <div className="mj-segmented">
+              <button className={bonusMode === 'fan' ? 'active' : ''} onClick={() => setBonusMode('fan')}>Tambah {MODES[mode].unit}</button>
+              <button className={bonusMode === 'side' ? 'active' : ''} onClick={() => setBonusMode('side')}>Bayar langsung</button>
+            </div>
+            <div className="mj-mode-note" style={{ marginTop: 0 }}>
+              {bonusMode === 'fan'
+                ? `Bunga & kong milik pemenang menambah nilai tangannya. Milik yang kalah tidak berpengaruh.`
+                : `Bunga & kong siapa pun langsung dibayar oleh tiga pemain lain, terlepas siapa yang menang. Kong tertutup dihitung dua kali kong terbuka.`}
+            </div>
+            <div className="mj-row-between">
+              <div className="mj-label" style={{ marginBottom: 0 }}>Nilai per bunga</div>
+              <input className="mj-number-input" type="number" value={flowerUnit} onChange={(e) => setFlowerUnit(e.target.value)} />
+            </div>
+            <div className="mj-row-between">
+              <div className="mj-label" style={{ marginBottom: 0 }}>Nilai per kong terbuka</div>
+              <input className="mj-number-input" type="number" value={kongUnit} onChange={(e) => setKongUnit(e.target.value)} />
+            </div>
+          </div>
+
           <button className="mj-primary-btn" onClick={hostGame}>Buat Kode & Mulai</button>
         </div>
         {renderToast()}
@@ -2022,7 +2201,9 @@ Balas HANYA JSON, tanpa markdown:
             <div key={i} className={'mj-seat ' + SEAT_CLASS[i]}>
               <div className={'mj-tile' + (i === game.dealerIdx ? ' is-dealer' : '')}>
                 {i === game.dealerIdx && <div className="mj-dealer-badge">庄{game.streak > 1 ? ` ×${game.streak}` : ''}</div>}
-                <div className="mj-tile-name">{p.name}</div>
+                <div className="mj-tile-name">
+                  <span className="mj-seat-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>{p.name}
+                </div>
                 <div className={'mj-tile-score' + (p.score < 0 ? ' negative' : p.score > 0 ? ' positive' : '')}>{p.score > 0 ? '+' : ''}{p.score}</div>
               </div>
             </div>
@@ -2030,6 +2211,7 @@ Balas HANYA JSON, tanpa markdown:
           <div className="mj-seat seat-center">
             <div className="mj-center-info">
               <div className="mj-round-no">局 {game.round}</div>
+              <div className="mj-wind-line">{WIND_GLYPH[game.roundWind || 0]}風圈 · putaran {WIND_NAME[game.roundWind || 0]}</div>
               <div className="mj-dealer-line">庄家 {game.players[game.dealerIdx].name}</div>
               <button className="mj-primary-btn mj-add-round-btn" onClick={() => openAddRound()}>+ Ronde</button>
               {game.history.length > 0 && <button className="mj-link-btn mj-undo-btn" onClick={undoLast}>Undo ronde terakhir</button>}
@@ -2037,69 +2219,226 @@ Balas HANYA JSON, tanpa markdown:
           </div>
         </div>
 
-        {showAddRound && (
+        {showAddRound && (() => {
+          const st = currentSettlement();
+          const canProceed = formDraw || (formWinner !== null && Number(formValue) > 0 && (formMethod === 'selfdraw' || formDiscarder !== null));
+          const sideOn = (game.bonusMode || 'fan') === 'side';
+          return (
           <div className="mj-sheet-backdrop" onClick={() => setShowAddRound(false)}>
             <div className="mj-sheet" onClick={(e) => e.stopPropagation()}>
               <div className="mj-sheet-handle" />
-              <div className="mj-sheet-title">Ronde {game.round}</div>
-              <div className="mj-segmented">
-                <button className={!formDraw ? 'active' : ''} onClick={() => setFormDraw(false)}>Ada Menang</button>
-                <button className={formDraw ? 'active' : ''} onClick={() => setFormDraw(true)}>Seri (流局)</button>
+              <div className="mj-row-between">
+                <div className="mj-sheet-title" style={{ marginBottom: 0 }}>Ronde {game.round}</div>
+                <div className="mj-step-pill">Langkah {roundStep}/3</div>
               </div>
-              {!formDraw && (
+              <div className="mj-step-bar">
+                <span className={roundStep >= 1 ? 'on' : ''} /><span className={roundStep >= 2 ? 'on' : ''} /><span className={roundStep >= 3 ? 'on' : ''} />
+              </div>
+
+              {/* ---------- LANGKAH 1: HASIL & NILAI TANGAN ---------- */}
+              {roundStep === 1 && (
                 <>
-                  <div className="mj-label">Pemenang</div>
-                  <div className="mj-choice-row">
-                    {game.players.map((p, i) => (
-                      <button key={i} className={'mj-choice-btn' + (formWinner === i ? ' active' : '')}
-                        onClick={() => { setFormWinner(i); setFormDiscarder(null); }}>
-                        {p.name}{i === game.dealerIdx ? ' (庄)' : ''}</button>
-                    ))}
-                  </div>
-                  <div className="mj-label">Cara Menang</div>
                   <div className="mj-segmented">
-                    <button className={formMethod === 'selfdraw' ? 'active' : ''} onClick={() => setFormMethod('selfdraw')}>自摸 Self-draw</button>
-                    <button className={formMethod === 'discard' ? 'active' : ''} onClick={() => setFormMethod('discard')}>放炮 Discard</button>
+                    <button className={!formDraw ? 'active' : ''} onClick={() => setFormDraw(false)}>Ada Menang</button>
+                    <button className={formDraw ? 'active' : ''} onClick={() => setFormDraw(true)}>Seri (流局)</button>
                   </div>
-                  {formMethod === 'discard' && (
+                  {!formDraw && (
                     <>
-                      <div className="mj-label">Pembuang</div>
+                      <div className="mj-label">Pemenang</div>
                       <div className="mj-choice-row">
-                        {others.map((i) => (
-                          <button key={i} className={'mj-choice-btn' + (formDiscarder === i ? ' active' : '')}
-                            onClick={() => setFormDiscarder(i)} disabled={formWinner === null}>{game.players[i].name}</button>
+                        {game.players.map((p, i) => (
+                          <button key={i} className={'mj-choice-btn' + (formWinner === i ? ' active' : '')}
+                            onClick={() => { setFormWinner(i); setFormDiscarder(null); }}>
+                            {p.name} <span className="mj-choice-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>
+                          </button>
                         ))}
+                      </div>
+                      <div className="mj-label">Cara Menang</div>
+                      <div className="mj-segmented">
+                        <button className={formMethod === 'selfdraw' ? 'active' : ''} onClick={() => setFormMethod('selfdraw')}>自摸 Self-draw</button>
+                        <button className={formMethod === 'discard' ? 'active' : ''} onClick={() => setFormMethod('discard')}>放炮 Discard</button>
+                      </div>
+                      {formMethod === 'discard' && (
+                        <>
+                          <div className="mj-label">Pembuang</div>
+                          <div className="mj-choice-row">
+                            {[0, 1, 2, 3].filter((i) => i !== formWinner).map((i) => (
+                              <button key={i} className={'mj-choice-btn' + (formDiscarder === i ? ' active' : '')}
+                                onClick={() => setFormDiscarder(i)} disabled={formWinner === null}>{game.players[i].name}</button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <div className="mj-row-between">
+                        <div className="mj-label" style={{ marginBottom: 0 }}>Nilai pola tangan ({cfg.unit})</div>
+                        <button className="mj-link-btn" style={{ padding: 0 }}
+                          onClick={() => { setShowAddRound(false); resetScan(); setScanMode(game.mode === 'custom' ? 'hongkong' : game.mode); setView('scan'); }}>
+                          📷 Scan
+                        </button>
+                      </div>
+                      <div className="mj-preset-row" style={{ marginTop: 8 }}>
+                        {cfg.presets.map((v) => (
+                          <button key={v} className={'mj-preset-chip' + (Number(formValue) === v ? ' active' : '')} onClick={() => setFormValue(String(v))}>{v}</button>
+                        ))}
+                      </div>
+                      <input className="mj-number-input mj-value-input" type="number" placeholder={`Nilai pola dasar`} value={formValue} onChange={(e) => setFormValue(e.target.value)} />
+                      <div className="mj-hint-text" style={{ textAlign: 'left', marginTop: 0 }}>
+                        Isi nilai polanya saja. Bunga, kong, angin, dan bonus lain ditambahkan di langkah berikutnya.
                       </div>
                     </>
                   )}
-                  <div className="mj-row-between">
-                    <div className="mj-label" style={{ marginBottom: 0 }}>Nilai ({cfg.unit})</div>
-                    <button className="mj-link-btn" style={{ padding: 0 }} onClick={() => { setShowAddRound(false); resetScan(); setScanMode(game.mode === 'custom' ? 'hongkong' : game.mode); setView('scan'); }}>
-                      📷 Scan dari foto
-                    </button>
+                  {formDraw && (
+                    <div className="mj-draw-note">
+                      Tidak ada pemenang. Bunga dan kong tetap dicatat di langkah berikutnya
+                      {sideOn ? ' karena pembayarannya terjadi selama ronde berjalan.' : ', walau dalam mode ini tidak menghasilkan poin saat seri.'}
+                    </div>
+                  )}
+                  <div className="mj-sheet-actions">
+                    <button className="mj-ghost-btn" onClick={() => setShowAddRound(false)}>Batal</button>
+                    <button className="mj-primary-btn" disabled={!canProceed} onClick={() => setRoundStep(2)}>Lanjut</button>
                   </div>
-                  <div className="mj-preset-row" style={{ marginTop: 8 }}>
-                    {cfg.presets.map((v) => (
-                      <button key={v} className={'mj-preset-chip' + (Number(formValue) === v ? ' active' : '')} onClick={() => setFormValue(String(v))}>{v}</button>
-                    ))}
+                </>
+              )}
+
+              {/* ---------- LANGKAH 2: BUNGA, KONG, BONUS ---------- */}
+              {roundStep === 2 && (
+                <>
+                  <div className="mj-mode-note">
+                    {sideOn
+                      ? 'Mode bayar langsung: bunga & kong SEMUA pemain dibayar oleh tiga lainnya, siapa pun yang menang.'
+                      : 'Mode tambah fan: bunga & kong hanya dihitung untuk pemenang. Catat semua tetap boleh, sebagai rekaman.'}
                   </div>
-                  <input className="mj-number-input mj-value-input" type="number" placeholder={`Jumlah ${cfg.unit}`} value={formValue} onChange={(e) => setFormValue(e.target.value)} />
-                  {formWinner !== null && formValue && Number(formValue) > 0 && (formMethod === 'selfdraw' || formDiscarder !== null) && (
-                    <div className="mj-preview">
-                      {computeDeltas(game, formWinner, formMethod, formDiscarder, Number(formValue)).map((d, i) => d !== 0 && (
-                        <span key={i} className={d > 0 ? 'positive' : 'negative'}>{game.players[i].name} {d > 0 ? '+' : ''}{d}</span>
+
+                  {game.players.map((p, i) => {
+                    const b = formBonuses[i];
+                    const isWinner = !formDraw && formWinner === i;
+                    const counts = !sideOn && !isWinner;
+                    return (
+                      <div key={i} className={'mj-bonus-card' + (isWinner ? ' winner' : '') + (counts ? ' muted' : '')}>
+                        <div className="mj-bonus-head">
+                          <span className="mj-bonus-name">
+                            <span className="mj-bonus-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>
+                            {p.name}
+                            {i === game.dealerIdx && <span className="mj-bonus-tag">庄</span>}
+                            {isWinner && <span className="mj-bonus-tag win">menang</span>}
+                          </span>
+                        </div>
+                        {[
+                          { key: 'flowers', label: '花 Bunga' },
+                          { key: 'kongAn', label: '暗槓 Kong tertutup' },
+                          { key: 'kongMing', label: '明槓 Kong terbuka' },
+                        ].map((row) => (
+                          <div key={row.key} className="mj-stepper-row">
+                            <span className="mj-stepper-label">{row.label}</span>
+                            <div className="mj-stepper">
+                              <button onClick={() => setBonus(i, row.key, b[row.key] - 1)}>−</button>
+                              <span className="mj-stepper-val">{b[row.key]}</span>
+                              <button onClick={() => setBonus(i, row.key, b[row.key] + 1)}>+</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+
+                  {!formDraw && formWinner !== null && (
+                    <div className="mj-bonus-card winner">
+                      <div className="mj-bonus-head">
+                        <span className="mj-bonus-name">Bonus tangan {game.players[formWinner].name}</span>
+                      </div>
+                      {[
+                        { key: 'seatWind', label: `門風 Triplet angin duduk (${WIND_GLYPH[seatWindOf(formWinner, game.dealerIdx)]})` },
+                        { key: 'roundWind', label: `圈風 Triplet angin putaran (${WIND_GLYPH[game.roundWind || 0]})` },
+                        { key: 'concealed', label: '門前清 Tangan tertutup' },
+                        { key: 'selfDrawBonus', label: '自摸 Bonus self-draw', disabled: formMethod !== 'selfdraw' },
+                        { key: 'lastTile', label: '海底撈月 Menang di ubin terakhir' },
+                        { key: 'kongBloom', label: '槓上開花 Menang dari ubin pengganti kong' },
+                        { key: 'robKong', label: '搶槓 Merampok kong' },
+                      ].map((row) => (
+                        <label key={row.key} className={'mj-toggle-row mj-extra-row' + (row.disabled ? ' disabled' : '')}>
+                          <span>{row.label}</span>
+                          <input type="checkbox" disabled={row.disabled} checked={!!formExtra[row.key]}
+                            onChange={(e) => setFormExtra({ ...formExtra, [row.key]: e.target.checked })} />
+                        </label>
+                      ))}
+                      <div className="mj-hint-text" style={{ textAlign: 'left' }}>Masing-masing menambah 1 {cfg.unit}.</div>
+                    </div>
+                  )}
+
+                  <div className="mj-sheet-actions">
+                    <button className="mj-ghost-btn" onClick={() => setRoundStep(1)}>Kembali</button>
+                    <button className="mj-primary-btn" onClick={() => setRoundStep(3)}>Lihat Konklusi</button>
+                  </div>
+                </>
+              )}
+
+              {/* ---------- LANGKAH 3: KONKLUSI ---------- */}
+              {roundStep === 3 && st && (
+                <>
+                  {!formDraw && (
+                    <div className="mj-concl-box">
+                      <div className="mj-concl-title">Nilai tangan {game.players[formWinner].name}</div>
+                      <div className="mj-concl-line"><span>Pola dasar</span><span>{st.baseValue}</span></div>
+                      {st.fanLines.map((l, i) => (
+                        <div key={i} className="mj-concl-line"><span>{l.label}</span><span>+{l.value}</span></div>
+                      ))}
+                      <div className="mj-concl-line total"><span>Total</span><span>{st.total} {cfg.unit}</span></div>
+                      {st.cappedAt && <div className="mj-concl-cap">Dibatasi maksimum {st.cappedAt} {cfg.unit} sesuai aturan {cfg.short}.</div>}
+                    </div>
+                  )}
+
+                  {st.sideLines.length > 0 && (
+                    <div className="mj-concl-box">
+                      <div className="mj-concl-title">Bayar langsung (bunga & kong)</div>
+                      {st.sideLines.map((l, i) => (
+                        <div key={i} className="mj-concl-line">
+                          <span>{game.players[l.idx].name} · {l.flowers}花 {l.kongAn}暗 {l.kongMing}明</span>
+                          <span>{l.units} × 3</span>
+                        </div>
                       ))}
                     </div>
                   )}
+
+                  {st.winLines.length > 0 && (
+                    <div className="mj-concl-box">
+                      <div className="mj-concl-title">Aliran bayar tangan</div>
+                      {st.winLines.map((l, i) => (
+                        <div key={i} className="mj-concl-line">
+                          <span>{game.players[l.from].name} → {game.players[formWinner].name}</span>
+                          <span>{l.amount}{l.doubled ? ' (庄 ×2)' : ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mj-concl-box final">
+                    <div className="mj-concl-title">Perolehan Ronde Ini</div>
+                    {game.players.map((p, i) => (
+                      <div key={i} className={'mj-final-row' + (!formDraw && formWinner === i ? ' winner' : '')}>
+                        <span className="mj-final-name">
+                          <span className="mj-bonus-wind">{WIND_GLYPH[seatWindOf(i, game.dealerIdx)]}</span>{p.name}
+                        </span>
+                        <span className="mj-final-detail">
+                          {st.winDeltas[i] !== 0 && <span>tangan {st.winDeltas[i] > 0 ? '+' : ''}{st.winDeltas[i]}</span>}
+                          {st.sideDeltas[i] !== 0 && <span>bonus {st.sideDeltas[i] > 0 ? '+' : ''}{st.sideDeltas[i]}</span>}
+                        </span>
+                        <span className={'mj-final-amt' + (st.deltas[i] > 0 ? ' positive' : st.deltas[i] < 0 ? ' negative' : '')}>
+                          {st.deltas[i] > 0 ? '+' : ''}{st.deltas[i]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mj-sheet-actions">
+                    <button className="mj-ghost-btn" onClick={() => setRoundStep(2)}>Kembali</button>
+                    <button className="mj-primary-btn" onClick={confirmRound}>Simpan Ronde</button>
+                  </div>
                 </>
               )}
-              <div className="mj-sheet-actions">
-                <button className="mj-ghost-btn" onClick={() => setShowAddRound(false)}>Batal</button>
-                <button className="mj-primary-btn" onClick={confirmRound}>Simpan Ronde</button>
-              </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {showHistorySheet && (
           <div className="mj-sheet-backdrop" onClick={() => setShowHistorySheet(false)}>
@@ -2110,9 +2449,26 @@ Balas HANYA JSON, tanpa markdown:
                 {game.history.length === 0 && <div className="mj-empty">Belum ada ronde.</div>}
                 {game.history.map((h) => (
                   <div key={h.id} className="mj-history-row">
-                    <div className="mj-history-round">局{h.roundNum}</div>
+                    <div className="mj-history-round">局{h.roundNum} · {WIND_GLYPH[h.roundWind || 0]}圈</div>
                     <div className="mj-history-desc">
                       {h.draw ? 'Seri (流局)' : `${game.players[h.winnerIdx].name} menang · ${h.method === 'selfdraw' ? '自摸' : `放炮 dari ${game.players[h.discarderIdx].name}`} · ${h.value} ${cfg.unit}`}
+                    </div>
+                    {!h.draw && h.bonusFan > 0 && (
+                      <div className="mj-history-sub">pola {h.baseValue} + bonus {h.bonusFan}</div>
+                    )}
+                    {h.bonuses && h.bonuses.some((b) => b.flowers || b.kongAn || b.kongMing) && (
+                      <div className="mj-history-sub">
+                        {h.bonuses.map((b, i) => (b.flowers || b.kongAn || b.kongMing)
+                          ? `${game.players[i].name}: ${b.flowers}花 ${b.kongAn}暗 ${b.kongMing}明` : null)
+                          .filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                    <div className="mj-history-deltas">
+                      {h.deltas.map((d, i) => (
+                        <span key={i} className={d > 0 ? 'positive' : d < 0 ? 'negative' : 'zero'}>
+                          {game.players[i].name.split(' ')[0]} {d > 0 ? '+' : ''}{d}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -2247,6 +2603,48 @@ const CSS = `
 .mj-demo-hint,.mj-demo-active{font-size:12.5px;line-height:1.55;opacity:0.75;margin-bottom:10px;}
 .mj-demo-active{color:var(--gold);opacity:1;}
 .mj-code-badge.demo{background:rgba(178,58,46,0.2);border-color:var(--seal-red);color:#ff8a7a;letter-spacing:0.12em;}
+
+.mj-step-pill{font-size:11px;background:rgba(199,154,59,0.18);color:var(--gold);padding:4px 10px;border-radius:12px;font-weight:700;}
+.mj-step-bar{display:flex;gap:5px;margin:10px 0 14px;}
+.mj-step-bar span{flex:1;height:3px;border-radius:2px;background:rgba(243,236,218,0.15);}
+.mj-step-bar span.on{background:var(--gold);}
+.mj-choice-wind{font-family:'Noto Serif TC',serif;font-size:11px;opacity:0.6;margin-left:3px;}
+.mj-seat-wind{font-family:'Noto Serif TC',serif;font-size:11px;color:var(--seal-red);margin-right:4px;font-weight:700;}
+.mj-wind-line{font-family:'Noto Serif TC',serif;font-size:10.5px;color:var(--gold);opacity:0.85;margin-top:1px;}
+.mj-mode-note{font-size:11.5px;line-height:1.5;opacity:0.7;background:rgba(243,236,218,0.06);padding:9px 11px;border-radius:8px;margin-bottom:12px;}
+.mj-draw-note{font-size:12.5px;line-height:1.55;opacity:0.75;padding:6px 0 4px;}
+.mj-bonus-card{background:rgba(243,236,218,0.06);border:1px solid rgba(243,236,218,0.14);border-radius:11px;padding:11px 13px;margin-bottom:9px;}
+.mj-bonus-card.winner{border-color:var(--gold);background:rgba(199,154,59,0.1);}
+.mj-bonus-card.muted{opacity:0.6;}
+.mj-bonus-head{margin-bottom:6px;}
+.mj-bonus-name{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.mj-bonus-wind{font-family:'Noto Serif TC',serif;font-size:13px;color:var(--gold);}
+.mj-bonus-tag{font-size:9.5px;background:var(--seal-red);color:var(--tile-ivory);padding:2px 7px;border-radius:9px;font-weight:700;}
+.mj-bonus-tag.win{background:var(--bamboo);}
+.mj-stepper-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;}
+.mj-stepper-label{font-size:12.5px;opacity:0.85;}
+.mj-stepper{display:flex;align-items:center;gap:4px;}
+.mj-stepper button{width:30px;height:30px;border-radius:8px;border:1px solid rgba(243,236,218,0.25);background:rgba(243,236,218,0.08);color:var(--tile-ivory);font-size:16px;line-height:1;cursor:pointer;}
+.mj-stepper-val{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;width:26px;text-align:center;}
+.mj-extra-row{padding:6px 0;font-size:12.5px;}
+.mj-extra-row.disabled{opacity:0.35;}
+.mj-concl-box{background:rgba(243,236,218,0.06);border-radius:11px;padding:12px 13px;margin-bottom:10px;}
+.mj-concl-box.final{border:1px solid var(--gold);background:rgba(199,154,59,0.1);}
+.mj-concl-title{font-family:'Noto Serif TC',serif;font-size:13.5px;font-weight:700;color:var(--gold);margin-bottom:8px;}
+.mj-concl-line{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;opacity:0.85;}
+.mj-concl-line span:last-child{font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
+.mj-concl-line.total{border-top:1px solid rgba(243,236,218,0.15);margin-top:5px;padding-top:7px;font-weight:700;opacity:1;color:var(--gold);}
+.mj-concl-cap{font-size:11px;color:#ffb4a8;margin-top:6px;line-height:1.45;}
+.mj-final-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(243,236,218,0.08);}
+.mj-final-row:last-child{border-bottom:none;}
+.mj-final-row.winner .mj-final-name{color:var(--gold);}
+.mj-final-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px;min-width:78px;}
+.mj-final-detail{flex:1;display:flex;gap:8px;font-size:10.5px;opacity:0.55;font-family:'IBM Plex Mono',monospace;flex-wrap:wrap;}
+.mj-final-amt{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:15px;opacity:0.45;}
+.mj-final-amt.positive{color:var(--bamboo);opacity:1;} .mj-final-amt.negative{color:#ff8a7a;opacity:1;}
+.mj-history-sub{font-size:11px;opacity:0.6;margin-top:3px;line-height:1.4;}
+.mj-history-deltas{display:flex;flex-wrap:wrap;gap:7px;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;}
+.mj-history-deltas .positive{color:var(--bamboo);} .mj-history-deltas .negative{color:#ff8a7a;} .mj-history-deltas .zero{opacity:0.4;}
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
 .mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
