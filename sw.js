@@ -1,4 +1,4 @@
-const CACHE = 'mahjong-table-score-v5';
+const CACHE = 'mahjong-table-score-v6';
 const ASSETS = [
   './', './index.html', './manifest.json', './icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
