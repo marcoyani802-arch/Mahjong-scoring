@@ -468,8 +468,10 @@ function Avatar({ name, size, wind, dealer, title }) {
         </defs>
         <circle cx="24" cy="24" r="23" fill={`url(#${gid})`} />
         <circle cx="24" cy="24" r="23" fill="none" stroke={tier ? tier.color : 'rgba(243,236,218,0.35)'} strokeWidth={tier ? 2.5 : 1.5} />
-        <text x="24" y="30" textAnchor="middle" fontSize="17" fontWeight="700"
-          fill="#f3ecda" fontFamily="Inter, sans-serif">{initialsOf(name)}</text>
+        {ach
+          ? <g><AvatarArt art={ach.art} /></g>
+          : <text x="24" y="30" textAnchor="middle" fontSize="17" fontWeight="700"
+              fill="#f3ecda" fontFamily="Inter, sans-serif">{initialsOf(name)}</text>}
       </svg>
       {wind !== undefined && <span className="mj-avatar-wind">{WIND_GLYPH[wind]}</span>}
       {ach && sz >= 34 && (
@@ -516,6 +518,181 @@ function Mascot({ mood, line, small }) {
 }
 
 
+
+
+/* ============================ KARAKTER AVATAR ============================ */
+/* Setiap pangkat punya karakter sendiri, digambar sebagai SVG di kanvas 48x48. */
+function AvatarArt({ art }) {
+  const A = {
+    tile: (
+      <g>
+        <rect x="14" y="10" width="20" height="27" rx="4" fill="#f7f2e4" stroke="#d8cba9" strokeWidth="1.2" />
+        <ellipse cx="20" cy="21" rx="1.7" ry="2.2" fill="#23201a" />
+        <ellipse cx="28" cy="21" rx="1.7" ry="2.2" fill="#23201a" />
+        <ellipse cx="17" cy="26" rx="2" ry="1.3" fill="#e79a92" opacity="0.6" />
+        <ellipse cx="31" cy="26" rx="2" ry="1.3" fill="#e79a92" opacity="0.6" />
+        <path d="M21 26 q3 2.6 6 0" stroke="#b23a2e" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+        <text x="24" y="35" textAnchor="middle" fontSize="6" fill="#1e7a4c" fontFamily="serif" fontWeight="700">發</text>
+      </g>
+    ),
+    sparrow: (
+      <g>
+        <ellipse cx="24" cy="27" rx="11" ry="9" fill="#8a6a3f" />
+        <ellipse cx="21" cy="27" rx="7" ry="6" fill="#c2a06a" />
+        <circle cx="30" cy="19" r="6.5" fill="#6f5330" />
+        <circle cx="32" cy="18" r="1.4" fill="#fff" />
+        <circle cx="32.3" cy="18" r="0.7" fill="#111" />
+        <path d="M36 20 l5 1.6 -5 1.8 Z" fill="#e0a63c" />
+        <path d="M14 26 q-6 3 -2 8 q4 2 7 -2" fill="#6f5330" />
+        <path d="M22 35 l-1 4 M27 35 l1 4" stroke="#e0a63c" strokeWidth="1.8" strokeLinecap="round" />
+      </g>
+    ),
+    blossom: (
+      <g>
+        {[0, 72, 144, 216, 288].map((deg, i) => (
+          <ellipse key={i} cx="24" cy="14" rx="6" ry="8" fill="#e88ba0" transform={`rotate(${deg} 24 24)`} />
+        ))}
+        <circle cx="24" cy="24" r="5" fill="#f7d774" />
+        <circle cx="22" cy="23" r="1.2" fill="#23201a" />
+        <circle cx="26" cy="23" r="1.2" fill="#23201a" />
+        <path d="M22 26.5 q2 2 4 0" stroke="#b23a2e" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      </g>
+    ),
+    tilestack: (
+      <g>
+        <rect x="9" y="18" width="13" height="19" rx="3" fill="#e9dfc4" <rect x="9" y="18" width="13" height="19" rx="3" fill="#e6dcc2" />
+        <rect x="26" y="18" width="13" height="19" rx="3" fill="#e6dcc2" />
+        <rect x="17.5" y="11" width="13" height="19" rx="3" fill="#f7f2e4" stroke="#d8cba9" strokeWidth="1.2" />
+        <circle cx="24" cy="20" r="4.5" fill="none" stroke="#1f4e8c" strokeWidth="1.6" />
+        <circle cx="24" cy="20" r="1.8" fill="#c0392b" />
+      </g>
+    ),
+    kongtiles: (
+      <g>
+        {[0, 1, 2, 3].map((i) => (
+          <rect key={i} x={7 + i * 9} y={16} width="8" height="17" rx="2.2" fill="#f7f2e4" stroke="#c9bb98" strokeWidth="1" />
+        ))}
+        {[0, 1, 2, 3].map((i) => (
+          <circle key={i} cx={11 + i * 9} cy="24" r="2.6" fill="#1e7a4c" />
+        ))}
+        <path d="M8 37 h32" stroke="#c79a3b" strokeWidth="2.4" strokeLinecap="round" />
+      </g>
+    ),
+    medal: (
+      <g>
+        <path d="M16 8 l4 12 M32 8 l-4 12" stroke="#b23a2e" strokeWidth="3.5" strokeLinecap="round" />
+        <circle cx="24" cy="28" r="11" fill="#dcae4c" stroke="#a1761f" strokeWidth="1.6" />
+        <circle cx="24" cy="28" r="7.5" fill="none" stroke="#fff3d0" strokeWidth="1.2" opacity="0.8" />
+        <text x="24" y="32" textAnchor="middle" fontSize="10" fill="#7d5c17" fontFamily="serif" fontWeight="700">勝</text>
+      </g>
+    ),
+    lantern: (
+      <g>
+        <path d="M24 6 v4" stroke="#7d5c17" strokeWidth="1.6" />
+        <rect x="16" y="9" width="16" height="3" rx="1.2" fill="#8a5320" />
+        <ellipse cx="24" cy="24" rx="13" ry="12" fill="#c8493b" />
+        <ellipse cx="24" cy="24" rx="5" ry="12" fill="#e0574a" opacity="0.7" />
+        <rect x="16" y="35" width="16" height="3" rx="1.2" fill="#8a5320" />
+        <text x="24" y="28" textAnchor="middle" fontSize="11" fill="#f7d774" fontFamily="serif" fontWeight="700">庄</text>
+        <path d="M24 38 v5" stroke="#f7d774" strokeWidth="2" strokeLinecap="round" />
+      </g>
+    ),
+    ingot: (
+      <g>
+        <path d="M10 32 q4 -12 14 -12 q10 0 14 12 q-6 4 -14 4 q-8 0 -14 -4 Z" fill="#dcae4c" stroke="#a1761f" strokeWidth="1.4" />
+        <ellipse cx="24" cy="20" rx="8" ry="3.4" fill="#f0d78e" />
+        <text x="24" y="32" textAnchor="middle" fontSize="8" fill="#7d5c17" fontFamily="serif" fontWeight="700">財</text>
+        <circle cx="13" cy="14" r="1.6" fill="#fff3d0" /><circle cx="36" cy="12" r="1.2" fill="#fff3d0" />
+      </g>
+    ),
+    luckycat: (
+      <g>
+        <ellipse cx="24" cy="30" rx="12" ry="11" fill="#f7f2e4" stroke="#d8cba9" strokeWidth="1" />
+        <path d="M14 16 l2 8 6 -4 Z" fill="#f7f2e4" stroke="#d8cba9" strokeWidth="1" />
+        <path d="M34 16 l-2 8 -6 -4 Z" fill="#f7f2e4" stroke="#d8cba9" strokeWidth="1" />
+        <circle cx="24" cy="24" r="10" fill="#fffdf6" stroke="#d8cba9" strokeWidth="1" />
+        <ellipse cx="20.5" cy="23" rx="1.4" ry="2" fill="#23201a" />
+        <ellipse cx="27.5" cy="23" rx="1.4" ry="2" fill="#23201a" />
+        <ellipse cx="17" cy="27" rx="2" ry="1.3" fill="#e79a92" opacity="0.6" />
+        <ellipse cx="31" cy="27" rx="2" ry="1.3" fill="#e79a92" opacity="0.6" />
+        <path d="M22 27 q2 2 4 0" stroke="#b23a2e" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+        <circle cx="24" cy="35" r="3" fill="#dcae4c" />
+        <path d="M36 28 q5 -6 2 -11" stroke="#f7f2e4" strokeWidth="3.4" fill="none" strokeLinecap="round" />
+      </g>
+    ),
+    mask: (
+      <g>
+        <path d="M24 8 q13 0 13 14 q0 14 -13 20 q-13 -6 -13 -20 q0 -14 13 -14 Z" fill="#2f3b45" />
+        <path d="M14 20 q5 -4 8 0 q-4 3 -8 0 Z" fill="#f7f2e4" />
+        <path d="M34 20 q-5 -4 -8 0 q4 3 8 0 Z" fill="#f7f2e4" />
+        <circle cx="18" cy="20" r="1.6" fill="#c0392b" /><circle cx="30" cy="20" r="1.6" fill="#c0392b" />
+        <path d="M17 31 q7 5 14 0" stroke="#c79a3b" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <path d="M24 6 q-6 2 -8 5 M24 6 q6 2 8 5" stroke="#c79a3b" strokeWidth="1.6" fill="none" />
+      </g>
+    ),
+    lion: (
+      <g>
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((d, i) => (
+          <ellipse key={i} cx="24" cy="9" rx="5" ry="7" fill="#1e7a4c" transform={`rotate(${d} 24 24)`} opacity="0.95" />
+        ))}
+        <circle cx="24" cy="24" r="11" fill="#dcae4c" />
+        <ellipse cx="20" cy="22" rx="2.4" ry="2.8" fill="#23201a" />
+        <ellipse cx="28" cy="22" rx="2.4" ry="2.8" fill="#23201a" />
+        <circle cx="20.8" cy="21.2" r="0.9" fill="#fff" /><circle cx="28.8" cy="21.2" r="0.9" fill="#fff" />
+        <path d="M20 29 q4 4 8 0" stroke="#b23a2e" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <circle cx="24" cy="26" r="1.8" fill="#c0392b" />
+      </g>
+    ),
+    phoenix: (
+      <g>
+        <path d="M24 40 q-14 -8 -16 -22 q8 6 12 2 q-2 -8 4 -14 q6 6 4 14 q4 4 12 -2 q-2 14 -16 22 Z" fill="#c8493b" />
+        <path d="M24 36 q-9 -7 -11 -17 q6 5 9 2 q-1 -6 2 -10 q3 4 2 10 q3 3 9 -2 q-2 10 -11 17 Z" fill="#e0574a" />
+        <circle cx="24" cy="12" r="4" fill="#dcae4c" />
+        <circle cx="22.6" cy="11.4" r="1" fill="#23201a" />
+        <path d="M28 12 l4 1.4 -4 1.4 Z" fill="#f7d774" />
+      </g>
+    ),
+    dragon: (
+      <g>
+        <path d="M8 34 q6 -6 4 -12 q-2 -8 6 -12 q8 -4 14 2 q6 6 2 12 q-3 5 2 8" stroke="#1e7a4c" strokeWidth="4" fill="none" strokeLinecap="round" />
+        <circle cx="28" cy="18" r="9" fill="#1e7a4c" />
+        <path d="M22 10 q-3 -6 2 -7 q1 4 4 5 M34 11 q4 -5 6 -2 q-3 2 -3 6" fill="#c8493b" />
+        <circle cx="25" cy="17" r="2.4" fill="#f7d774" /><circle cx="25" cy="17" r="1.1" fill="#23201a" />
+        <circle cx="32" cy="17" r="2.4" fill="#f7d774" /><circle cx="32" cy="17" r="1.1" fill="#23201a" />
+        <path d="M24 24 q5 3 10 0" stroke="#0f4d30" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <path d="M30 26 q1 5 -3 7" stroke="#c8493b" strokeWidth="2" fill="none" strokeLinecap="round" />
+      </g>
+    ),
+    emperor: (
+      <g>
+        <path d="M11 15 l4 -7 4 5 5 -7 5 7 4 -5 4 7 Z" fill="#dcae4c" stroke="#a1761f" strokeWidth="1" />
+        <rect x="11" y="15" width="26" height="4" rx="1.5" fill="#c8493b" />
+        <ellipse cx="24" cy="30" rx="11" ry="12" fill="#f0d9b8" />
+        <path d="M13 26 q11 -5 22 0" stroke="#3a2f22" strokeWidth="1.6" fill="none" />
+        <circle cx="20" cy="29" r="1.6" fill="#23201a" /><circle cx="28" cy="29" r="1.6" fill="#23201a" />
+        <path d="M20 36 q4 3 8 0" stroke="#8a5320" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        <path d="M17 38 q2 6 7 6 q5 0 7 -6" fill="#e8e3d8" opacity="0.9" />
+      </g>
+    ),
+    god: (
+      <g>
+        <path d="M9 14 h30 l-3 -6 H12 Z" fill="#1c1a15" />
+        <rect x="12" y="12" width="24" height="5" rx="2" fill="#c8493b" />
+        <circle cx="24" cy="14" r="2.4" fill="#dcae4c" />
+        <ellipse cx="24" cy="28" rx="12" ry="12.5" fill="#f2d9b0" />
+        <path d="M12 25 q12 -6 24 0" stroke="#2b2118" strokeWidth="1.8" fill="none" />
+        <ellipse cx="19.5" cy="28" rx="1.8" ry="1.5" fill="#23201a" />
+        <ellipse cx="28.5" cy="28" rx="1.8" ry="1.5" fill="#23201a" />
+        <ellipse cx="15.5" cy="31" rx="2.4" ry="1.6" fill="#e79a92" opacity="0.55" />
+        <ellipse cx="32.5" cy="31" rx="2.4" ry="1.6" fill="#e79a92" opacity="0.55" />
+        <path d="M20 33 q4 3.5 8 0" stroke="#b23a2e" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <path d="M17 36 q0 9 7 10 q7 -1 7 -10 q-7 4 -14 0 Z" fill="#efeae0" />
+        <path d="M21 22 q3 -2 6 0" stroke="#2b2118" strokeWidth="1.4" fill="none" />
+      </g>
+    ),
+  };
+  return A[art] || A.tile;
+}
 
 /* ============================ PANGKAT & PENCAPAIAN ============================ */
 const TIERS = {
@@ -604,59 +781,59 @@ const EMPTY_STATS = {
 
 /* 25 pencapaian, dari yang paling gampang sampai paling berat. */
 const ACHIEVEMENTS = [
-  { id: 'first_game', tier: 1, cn: '入門', title: 'Anak Meja', badge: '門',
+  { id: 'first_game', art: 'tile', tier: 1, cn: '入門', title: 'Anak Meja', badge: '門',
     name: 'Duduk Pertama', desc: 'Selesaikan 1 game.', metric: (s) => s.games, target: 1 },
-  { id: 'first_win_round', tier: 1, cn: '初和', title: 'Pemenang Ronde', badge: '和',
+  { id: 'first_win_round', art: 'sparrow', tier: 1, cn: '初和', title: 'Pemenang Ronde', badge: '和',
     name: 'Hu Pertama', desc: 'Menangkan 1 ronde.', metric: (s) => s.roundWins, target: 1 },
-  { id: 'first_flower', tier: 1, cn: '拾花', title: 'Pemetik Bunga', badge: '花',
+  { id: 'first_flower', art: 'blossom', tier: 1, cn: '拾花', title: 'Pemetik Bunga', badge: '花',
     name: 'Bunga Pertama', desc: 'Dapatkan 1 ubin bunga.', metric: (s) => s.flowers, target: 1 },
-  { id: 'five_rounds', tier: 1, cn: '五局', title: 'Rutin Main', badge: '五',
+  { id: 'five_rounds', art: 'tilestack', tier: 1, cn: '五局', title: 'Rutin Main', badge: '五',
     name: 'Lima Ronde', desc: 'Mainkan 5 ronde.', metric: (s) => s.rounds, target: 5 },
-  { id: 'first_selfdraw', tier: 1, cn: '自摸', title: 'Penarik Ubin', badge: '摸',
+  { id: 'first_selfdraw', art: 'sparrow', tier: 1, cn: '自摸', title: 'Penarik Ubin', badge: '摸',
     name: 'Self-Draw Pertama', desc: 'Menang sekali dengan 自摸.', metric: (s) => s.selfDraws, target: 1 },
 
-  { id: 'three_games', tier: 2, cn: '三戰', title: 'Langganan Meja', badge: '常',
+  { id: 'three_games', art: 'tilestack', tier: 2, cn: '三戰', title: 'Langganan Meja', badge: '常',
     name: 'Tiga Game', desc: 'Selesaikan 3 game.', metric: (s) => s.games, target: 3 },
-  { id: 'first_kong', tier: 2, cn: '開槓', title: 'Pembuka Kong', badge: '槓',
+  { id: 'first_kong', art: 'kongtiles', tier: 2, cn: '開槓', title: 'Pembuka Kong', badge: '槓',
     name: 'Kong Pertama', desc: 'Dapatkan 1 kong.', metric: (s) => s.kongs, target: 1 },
-  { id: 'first_game_win', tier: 2, cn: '首勝', title: 'Juara Meja', badge: '勝',
+  { id: 'first_game_win', art: 'medal', tier: 2, cn: '首勝', title: 'Juara Meja', badge: '勝',
     name: 'Menang Satu Game', desc: 'Jadi pemain dengan poin tertinggi di 1 game.', metric: (s) => s.gameWins, target: 1 },
-  { id: 'ten_round_wins', tier: 2, cn: '十和', title: 'Tangan Panas', badge: '十',
+  { id: 'ten_round_wins', art: 'sparrow', tier: 2, cn: '十和', title: 'Tangan Panas', badge: '十',
     name: 'Sepuluh Hu', desc: 'Menangkan 10 ronde.', metric: (s) => s.roundWins, target: 10 },
-  { id: 'flower_garden', tier: 2, cn: '花園', title: 'Tukang Kebun', badge: '園',
+  { id: 'flower_garden', art: 'blossom', tier: 2, cn: '花園', title: 'Tukang Kebun', badge: '園',
     name: 'Kebun Bunga', desc: 'Kumpulkan 10 ubin bunga.', metric: (s) => s.flowers, target: 10 },
 
-  { id: 'dealer_double', tier: 3, cn: '連庄', title: 'Banker Bertahan', badge: '庄',
+  { id: 'dealer_double', art: 'lantern', tier: 3, cn: '連庄', title: 'Banker Bertahan', badge: '庄',
     name: 'Banker Beruntun', desc: 'Menang 2 ronde berturut sebagai banker.', metric: (s) => s.maxDealerStreak, target: 2 },
-  { id: 'big_hand', tier: 3, cn: '大牌', title: 'Pemain Besar', badge: '大',
+  { id: 'big_hand', art: 'ingot', tier: 3, cn: '大牌', title: 'Pemain Besar', badge: '大',
     name: 'Tangan Besar', desc: 'Menang dengan tangan bernilai 6 atau lebih.', metric: (s) => s.bestHand, target: 6 },
-  { id: 'ten_games', tier: 3, cn: '十戰', title: 'Veteran Meja', badge: 'veteran',
+  { id: 'ten_games', art: 'luckycat', tier: 3, cn: '十戰', title: 'Veteran Meja', badge: 'veteran',
     name: 'Sepuluh Game', desc: 'Selesaikan 10 game.', metric: (s) => s.games, target: 10 },
-  { id: 'five_selfdraw', tier: 3, cn: '五摸', title: 'Tangan Peka', badge: '摸',
+  { id: 'five_selfdraw', art: 'sparrow', tier: 3, cn: '五摸', title: 'Tangan Peka', badge: '摸',
     name: 'Lima Self-Draw', desc: 'Menang 5 kali dengan 自摸.', metric: (s) => s.selfDraws, target: 5 },
-  { id: 'kong_master', tier: 3, cn: '槓王', title: 'Raja Kong', badge: '槓',
+  { id: 'kong_master', art: 'kongtiles', tier: 3, cn: '槓王', title: 'Raja Kong', badge: '槓',
     name: 'Lima Kong', desc: 'Kumpulkan 5 kong.', metric: (s) => s.kongs, target: 5 },
-  { id: 'three_game_wins', tier: 3, cn: '三冠', title: 'Langganan Juara', badge: '冠',
+  { id: 'three_game_wins', art: 'medal', tier: 3, cn: '三冠', title: 'Langganan Juara', badge: '冠',
     name: 'Tiga Kali Juara', desc: 'Menangkan 3 game.', metric: (s) => s.gameWins, target: 3 },
 
-  { id: 'clean_game', tier: 4, cn: '無銃', title: 'Tembok Tak Tertembus', badge: '盾',
+  { id: 'clean_game', art: 'mask', tier: 4, cn: '無銃', title: 'Tembok Tak Tertembus', badge: '盾',
     name: 'Tanpa放炮', desc: 'Menang poin di satu game tanpa sekali pun kena 放炮.', metric: (s) => s.cleanGames, target: 1 },
-  { id: 'concealed_kong', tier: 4, cn: '暗槓', title: 'Penyimpan Rahasia', badge: '暗',
+  { id: 'concealed_kong', art: 'mask', tier: 4, cn: '暗槓', title: 'Penyimpan Rahasia', badge: '暗',
     name: 'Tiga Kong Tertutup', desc: 'Kumpulkan 3 暗槓.', metric: (s) => s.kongAn, target: 3 },
-  { id: 'fifty_wins', tier: 4, cn: '五十和', title: 'Ahli Meja', badge: '五十',
+  { id: 'fifty_wins', art: 'lion', tier: 4, cn: '五十和', title: 'Ahli Meja', badge: '五十',
     name: 'Lima Puluh Hu', desc: 'Menangkan 50 ronde.', metric: (s) => s.roundWins, target: 50 },
-  { id: 'dealer_triple', tier: 4, cn: '三連庄', title: 'Banker Kokoh', badge: '庄',
+  { id: 'dealer_triple', art: 'lantern', tier: 4, cn: '三連庄', title: 'Banker Kokoh', badge: '庄',
     name: 'Banker Tiga Beruntun', desc: 'Menang 3 ronde berturut sebagai banker.', metric: (s) => s.maxDealerStreak, target: 3 },
-  { id: 'big_night', tier: 4, cn: '大勝', title: 'Pulang Bawa Karung', badge: '財',
+  { id: 'big_night', art: 'ingot', tier: 4, cn: '大勝', title: 'Pulang Bawa Karung', badge: '財',
     name: 'Kemenangan Besar', desc: 'Akhiri satu game dengan selisih +100 poin atau lebih.', metric: (s) => s.bestGame, target: 100 },
-  { id: 'ten_big_hands', tier: 4, cn: '十大牌', title: 'Pemburu Tangan Besar', badge: '獵',
+  { id: 'ten_big_hands', art: 'phoenix', tier: 4, cn: '十大牌', title: 'Pemburu Tangan Besar', badge: '獵',
     name: 'Sepuluh Tangan Besar', desc: 'Menang 10 kali dengan nilai 6 atau lebih.', metric: (s) => s.bigWinRounds, target: 10 },
 
-  { id: 'limit_hand', tier: 5, cn: '滿貫', title: 'Penakluk Batas', badge: '滿',
+  { id: 'limit_hand', art: 'dragon', tier: 5, cn: '滿貫', title: 'Penakluk Batas', badge: '滿',
     name: 'Tangan Maksimum', desc: 'Menang dengan tangan yang mencapai batas maksimum ruleset.', metric: (s) => s.limitHands, target: 1 },
-  { id: 'dealer_five', tier: 5, cn: '五連庄', title: 'Banker Abadi', badge: '皇',
+  { id: 'dealer_five', art: 'emperor', tier: 5, cn: '五連庄', title: 'Banker Abadi', badge: '皇',
     name: 'Banker Lima Beruntun', desc: 'Menang 5 ronde berturut sebagai banker.', metric: (s) => s.maxDealerStreak, target: 5 },
-  { id: 'grand_master', tier: 5, cn: '雀聖', title: '雀聖 Dewa Mahjong', badge: '聖',
+  { id: 'grand_master', art: 'god', tier: 5, cn: '雀聖', title: '雀聖 Dewa Mahjong', badge: '聖',
     name: 'Dewa Mahjong', desc: 'Menangkan 25 game.', metric: (s) => s.gameWins, target: 25 },
 ];
 
@@ -781,7 +958,7 @@ function WinnerHandBox({ entry, names, unit }) {
 }
 
 /* ============================ MESIN PERHITUNGAN RONDE ============================ */
-const APP_BUILD = 'v13';
+const APP_BUILD = 'v14';
 const WIND_GLYPH = ['東', '南', '西', '北'];
 const DIE_PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 const WIND_NAME = ['Timur', 'Selatan', 'Barat', 'Utara'];
@@ -2873,8 +3050,19 @@ Balas HANYA JSON, tanpa markdown:
                   const isOn = equipped === a.id;
                   return (
                     <div key={a.id} className={'mj-ach-card' + (s2.unlocked ? ' unlocked t' + t : ' locked')}>
-                      <div className="mj-ach-badge" style={s2.unlocked ? { borderColor: TIERS[t].color, color: TIERS[t].color } : {}}>
-                        {s2.unlocked ? a.badge : '?'}
+                      <div className={'mj-ach-art' + (s2.unlocked ? '' : ' hidden')}
+                        style={s2.unlocked ? { borderColor: TIERS[t].color } : {}}>
+                        {s2.unlocked ? (
+                          <svg width="42" height="42" viewBox="0 0 48 48">
+                            <defs>
+                              <linearGradient id={'ag' + a.id} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={TIERS[t].grad[0]} /><stop offset="100%" stopColor={TIERS[t].grad[1]} />
+                              </linearGradient>
+                            </defs>
+                            <circle cx="24" cy="24" r="23" fill={'url(#ag' + a.id + ')'} />
+                            <AvatarArt art={a.art} />
+                          </svg>
+                        ) : <span className="mj-ach-lock">?</span>}
                       </div>
                       <div className="mj-ach-body">
                         <div className="mj-ach-title">{a.name}</div>
@@ -4007,6 +4195,11 @@ const CSS = `
 .mj-ach-equip{background:rgba(243,236,218,0.1);border:1px solid rgba(243,236,218,0.25);color:var(--tile-ivory);
   border-radius:9px;padding:8px 11px;font-size:11.5px;font-weight:700;cursor:pointer;flex-shrink:0;}
 .mj-ach-equip.on{background:var(--gold);color:var(--ink);border-color:var(--gold);}
+
+.mj-ach-art{width:44px;height:44px;border-radius:50%;border:2px solid rgba(243,236,218,0.2);display:flex;
+  align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;background:rgba(243,236,218,0.06);}
+.mj-ach-art.hidden{background:rgba(243,236,218,0.05);}
+.mj-ach-lock{font-family:'Noto Serif TC',serif;font-size:18px;opacity:0.4;font-weight:700;}
 .mj-error-text{color:#ff8a7a;font-size:12.5px;margin-top:8px;}
 .mj-hint-text{font-size:12px;opacity:0.55;margin-top:10px;text-align:center;}
 .mj-empty{opacity:0.5;font-size:13px;text-align:center;padding:16px 0;}
