@@ -399,6 +399,96 @@ function buildDemoData() {
   return { records, statsMap, activeGame };
 }
 
+
+/* ============================ GUIDEBOOK: DASAR ============================ */
+const TILE_COMPOSITION = [
+  { label: 'Wan / 萬 (Characters)', tiles: ['1m', '2m', '3m', '4m', '5m', '6m', '7m', '8m', '9m'], each: 4, total: 36 },
+  { label: 'Sou / 索 (Bamboo)', tiles: ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s'], each: 4, total: 36 },
+  { label: 'Pin / 筒 (Circles)', tiles: ['1p', '2p', '3p', '4p', '5p', '6p', '7p', '8p', '9p'], each: 4, total: 36 },
+  { label: 'Angin / 風', tiles: ['E', 'S', 'W', 'N'], each: 4, total: 16 },
+  { label: 'Naga / 三元', tiles: ['RD', 'GD', 'WD'], each: 4, total: 12 },
+];
+
+const BASICS = [
+  {
+    id: 'isi-set', cn: '牌', title: 'Isi Satu Set Mahjong',
+    body: [
+      'Inti setiap set mahjong sama: 136 ubin. Tiga warna bernomor 1–9 masing-masing empat buah, ditambah ubin kehormatan berupa empat angin dan tiga naga.',
+      'Di luar 136 itu ada 8 ubin bunga — 4 bunga (梅蘭菊竹) dan 4 musim (春夏秋冬) — sehingga satu kotak berisi 144 ubin. Bunga tidak ikut membentuk tangan; begitu ditarik langsung dibuka dan diganti ubin baru dari ujung tembok.',
+      'Set Singapura biasanya menambah 4 ubin hewan (kucing, tikus, ayam, lipan) jadi total 148. Ubin hewan berpasangan: kucing memburu tikus, ayam mematuk lipan, dan pasangan yang lengkap bernilai lebih.',
+    ],
+    composition: true,
+  },
+  {
+    id: 'tempat-duduk', cn: '座', title: 'Menentukan Tempat Duduk & Arah Angin',
+    body: [
+      'Ambil empat ubin angin 東南西北, acak tertutup, tiap pemain mengambil satu. Yang dapat 東 (Timur) jadi banker pertama sekaligus menentukan posisinya di meja; sisanya duduk mengikuti urutan angin.',
+      'Urutan duduk berlawanan arah jarum jam: dari Timur, sebelah KANANNYA adalah Selatan (南), lalu seberangnya Barat (西), lalu kirinya Utara (北). Ini yang sering terbalik — arah putaran mahjong berlawanan jarum jam, bukan searah.',
+      'Angin dudukmu (門風) menentukan triplet angin mana yang bernilai buatmu. Kalau kamu duduk di Selatan, hanya triplet 南 yang memberi poin; triplet angin lain tidak.',
+      'Selain angin duduk ada angin putaran (圈風). Permainan mulai dari putaran Timur, dan berpindah ke Selatan, Barat, Utara setelah semua pemain selesai jadi banker. Kalau angin dudukmu kebetulan sama dengan angin putaran, tripletnya dihitung dua kali.',
+    ],
+    seating: true,
+  },
+  {
+    id: 'bagi-ubin', cn: '洗', title: 'Mengocok & Membagi Ubin',
+    body: [
+      'Semua ubin ditelungkupkan dan diaduk, lalu tiap pemain menyusun tembok di depannya: 18 tumpuk dua tingkat untuk permainan 13 ubin, atau 18 tumpuk juga di gaya Taiwan. Keempat tembok dirapatkan membentuk kotak.',
+      'Banker melempar dadu. Jumlah mata dadu dihitung berlawanan jarum jam mulai dari banker untuk menentukan tembok siapa yang dibongkar, lalu dihitung lagi sebanyak angka itu dari ujung kanan tembok tersebut untuk menentukan titik potongnya.',
+      'Pengambilan dimulai dari banker, berlawanan jarum jam: empat ubin sekaligus, diulang tiga kali, jadi 12 ubin. Lalu tiap pemain mengambil satu lagi.',
+      'Hasil akhirnya: pemain biasa memegang 13 ubin, banker 14 ubin karena dia yang membuang pertama. Di aturan Taiwan angkanya jadi 16 dan 17.',
+      'Setelah itu semua bunga yang terlanjur masuk tangan dibuka bergantian mulai dari banker, dan diganti ubin dari ujung belakang tembok.',
+    ],
+  },
+  {
+    id: 'jalan-main', cn: '打', title: 'Jalannya Permainan',
+    body: [
+      'Banker membuang satu ubin lebih dulu. Setelah itu giliran berjalan berlawanan jarum jam: tarik satu ubin dari tembok, lalu buang satu. Tangan selalu kembali ke 13 ubin (atau 16 di Taiwan) setiap kali giliran berakhir.',
+      'Ubin yang dibuang boleh diambil pemain lain kalau bisa melengkapi set. Ini yang disebut "call", dan setnya jadi terbuka di meja — tidak bisa diubah lagi sampai akhir ronde.',
+      'Ronde berakhir kalau ada yang menang, atau kalau tembok habis tanpa pemenang. Yang kedua disebut seri (流局) dan tidak ada yang bayar.',
+    ],
+    calls: true,
+  },
+  {
+    id: 'kong', cn: '槓', title: 'Kong (槓) — Tiga Jenisnya',
+    body: [
+      'Kong adalah empat ubin identik. Karena satu set butuh tiga ubin, kong membuat tanganmu kekurangan satu — makanya setiap kali kong kamu berhak menarik ubin pengganti dari ujung belakang tembok, lalu membuang seperti biasa.',
+      'Menang dari ubin pengganti itu punya nama sendiri: 槓上開花 (bunga di atas kong), dan di kebanyakan meja dihitung sebagai poin tambahan.',
+      'Ada juga 搶槓 (merampok kong): kalau seseorang menambah ubin keempat ke pongnya yang terbuka, dan ubin itu justru yang kamu tunggu untuk menang, kamu boleh menyambarnya. Ini hanya berlaku untuk kong tambahan, tidak berlaku untuk kong tertutup.',
+    ],
+    kongTypes: true,
+  },
+  {
+    id: 'bunga', cn: '花', title: 'Bunga & Musim',
+    body: [
+      'Bunga bukan bagian tangan. Begitu ditarik, langsung dibuka di depanmu dan kamu ambil ubin pengganti. Kalau penggantinya bunga lagi, buka lagi dan ambil lagi.',
+      'Setiap bunga punya nomor 1–4 yang berpasangan dengan arah angin: 1 untuk Timur, 2 Selatan, 3 Barat, 4 Utara. Bunga yang nomornya cocok dengan angin dudukmu bernilai lebih.',
+      'Mengumpulkan keempat bunga atau keempat musim bernilai besar. Di Taiwan, mendapat kedelapan-delapannya disebut 八仙過海 dan biasanya langsung menang otomatis.',
+    ],
+  },
+];
+
+const CALL_TYPES = [
+  { cn: '吃 Chow', desc: 'Tiga ubin berurutan satu warna. Hanya boleh mengambil buangan dari pemain di sebelah KIRI kamu (pemain sebelum giliranmu).', ex: ['3m', '4m', '5m'], prio: 'Prioritas terendah' },
+  { cn: '碰 Pong', desc: 'Tiga ubin identik. Boleh mengambil buangan siapa saja. Giliran langsung lompat ke kamu, pemain di antaranya terlewati.', ex: ['7p', '7p', '7p'], prio: 'Mengalahkan chow' },
+  { cn: '槓 Kong', desc: 'Empat ubin identik. Boleh dari buangan siapa saja. Setelah kong, tarik ubin pengganti dari ujung belakang tembok.', ex: ['2s', '2s', '2s', '2s'], prio: 'Mengalahkan chow' },
+  { cn: '和 Hu', desc: 'Menyelesaikan seluruh tangan. Mengalahkan semua panggilan lain. Kalau dua orang menang dari satu buangan, biasanya yang lebih dekat searah putaran yang menang.', ex: ['5s', '5s'], prio: 'Prioritas tertinggi' },
+];
+
+const KONG_TYPES = [
+  {
+    cn: '暗槓', en: 'Kong Tertutup', desc: 'Keempat ubin kamu tarik sendiri, tidak ada yang dari buangan. Diletakkan tertutup di meja.',
+    pay: 'Semua tiga lawan bayar bonus kong ke kamu.', note: 'Tidak membatalkan status tangan tertutup (門前清).',
+  },
+  {
+    cn: '明槓', en: 'Kong Terbuka', desc: 'Kamu sudah punya tiga, lalu mengambil ubin keempat dari buangan lawan.',
+    pay: 'Hanya yang membuang yang bayar bonus kong.', note: 'Tangan jadi terbuka, 門前清 hangus.',
+  },
+  {
+    cn: '加槓', en: 'Kong Tambahan', desc: 'Kamu sudah punya pong terbuka, lalu menarik sendiri ubin keempat dan menambahkannya.',
+    pay: 'Umumnya semua tiga lawan bayar, tapi banyak meja membebankan ke pembuang pong aslinya.', note: 'Rawan disambar 搶槓 oleh lawan yang menunggu ubin itu.',
+  },
+];
+
 /* ============================ APP ============================ */
 const ACTIVE_KEY = 'mahjong-active-game-v2';
 const BACKUP_KEY = 'mahjong-predemo-backup-v2';
@@ -460,6 +550,13 @@ function MahjongApp() {
   const [quizQ, setQuizQ] = useState(null);
   const [quizPicked, setQuizPicked] = useState(null);
   const [quizScore, setQuizScore] = useState({ right: 0, total: 0 });
+  const [guideTab, setGuideTab] = useState('pola');
+  const [openBasic, setOpenBasic] = useState('isi-set');
+  const [simWinner, setSimWinner] = useState(0);
+  const [simMethod, setSimMethod] = useState('discard');
+  const [simDiscarder, setSimDiscarder] = useState(1);
+  const [simValue, setSimValue] = useState(4);
+  const [simDouble, setSimDouble] = useState(true);
 
   // scanner
   const [scanMode, setScanMode] = useState('hongkong');
@@ -1134,11 +1231,19 @@ Balas HANYA JSON, tanpa markdown:
             ))}
           </div>
 
+          <div className="mj-segmented" style={{ marginBottom: 14 }}>
+            <button className={guideTab === 'dasar' ? 'active' : ''} onClick={() => { setGuideTab('dasar'); setQuizOn(false); }}>Aturan Dasar</button>
+            <button className={guideTab === 'bayar' ? 'active' : ''} onClick={() => { setGuideTab('bayar'); setQuizOn(false); }}>Sistem Bayar</button>
+            <button className={guideTab === 'pola' ? 'active' : ''} onClick={() => setGuideTab('pola')}>Pola & Poin</button>
+          </div>
+
+          {guideTab === 'pola' && (
           <button className="mj-ghost-btn" style={{ marginTop: 0, marginBottom: 14 }} onClick={() => { if (quizOn) setQuizOn(false); else newQuiz(); }}>
             {quizOn ? '← Kembali ke daftar pola' : '🎴 Latihan: tebak polanya'}
           </button>
+          )}
 
-          {quizOn && quizQ && (
+          {guideTab === 'pola' && quizOn && quizQ && (
             <div className="mj-card">
               <div className="mj-row-between">
                 <div className="mj-label" style={{ marginBottom: 0 }}>Pola apa ini?</div>
@@ -1173,7 +1278,7 @@ Balas HANYA JSON, tanpa markdown:
             </div>
           )}
 
-          {!quizOn && (
+          {guideTab === 'pola' && !quizOn && (
             <>
               <div className="mj-cat-row">
                 <button className={'mj-cat-chip' + (guideCat === 'all' ? ' active' : '')} onClick={() => setGuideCat('all')}>Semua</button>
@@ -1229,6 +1334,240 @@ Balas HANYA JSON, tanpa markdown:
               </div>
             </>
           )}
+
+          {guideTab === 'dasar' && (
+            <>
+              {BASICS.map((b) => {
+                const isOpen = openBasic === b.id;
+                return (
+                  <div key={b.id} className="mj-card mj-basic-card">
+                    <div className="mj-basic-head" onClick={() => setOpenBasic(isOpen ? null : b.id)}>
+                      <div className="mj-basic-glyph">{b.cn}</div>
+                      <div className="mj-basic-title">{b.title}</div>
+                      <div className="mj-history-card-toggle">{isOpen ? '−' : '+'}</div>
+                    </div>
+                    {isOpen && (
+                      <div className="mj-basic-body">
+                        {b.body.map((p, i) => <p key={i}>{p}</p>)}
+
+                        {b.composition && (
+                          <>
+                            <div className="mj-label" style={{ marginTop: 12 }}>Rincian 136 Ubin Inti</div>
+                            {TILE_COMPOSITION.map((c) => (
+                              <div key={c.label} className="mj-comp-row">
+                                <div className="mj-comp-head">
+                                  <span>{c.label}</span>
+                                  <span className="mj-comp-count">×{c.each} = {c.total}</span>
+                                </div>
+                                <Tiles hand={c.tiles} size="sm" />
+                              </div>
+                            ))}
+                            <div className="mj-comp-total">136 inti + 8 bunga = 144 ubin per kotak</div>
+                          </>
+                        )}
+
+                        {b.seating && (
+                          <>
+                            <div className="mj-label" style={{ marginTop: 12 }}>Posisi Duduk</div>
+                            <div className="mj-seatmap">
+                              <div className="mj-seatmap-cell top"><span className="mj-seatmap-w">西</span><span>Barat</span></div>
+                              <div className="mj-seatmap-cell left"><span className="mj-seatmap-w">北</span><span>Utara</span></div>
+                              <div className="mj-seatmap-center">
+                                <div className="mj-seatmap-arrow">↺</div>
+                                <div className="mj-seatmap-note">berlawanan<br />jarum jam</div>
+                              </div>
+                              <div className="mj-seatmap-cell right"><span className="mj-seatmap-w">南</span><span>Selatan</span></div>
+                              <div className="mj-seatmap-cell bottom dealer"><span className="mj-seatmap-w">東</span><span>Timur · Banker</span></div>
+                            </div>
+                          </>
+                        )}
+
+                        {b.calls && (
+                          <>
+                            <div className="mj-label" style={{ marginTop: 12 }}>Panggilan & Urutan Prioritas</div>
+                            {CALL_TYPES.map((c) => (
+                              <div key={c.cn} className="mj-call-row">
+                                <div className="mj-call-head">
+                                  <span className="mj-call-cn">{c.cn}</span>
+                                  <span className="mj-call-prio">{c.prio}</span>
+                                </div>
+                                <Tiles hand={c.ex} size="sm" />
+                                <div className="mj-call-desc">{c.desc}</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+
+                        {b.kongTypes && (
+                          <>
+                            <div className="mj-label" style={{ marginTop: 12 }}>Tiga Jenis Kong</div>
+                            {KONG_TYPES.map((k) => (
+                              <div key={k.cn} className="mj-kong-row">
+                                <div className="mj-kong-head">
+                                  <span className="mj-call-cn">{k.cn}</span>
+                                  <span className="mj-kong-en">{k.en}</span>
+                                </div>
+                                <div className="mj-call-desc">{k.desc}</div>
+                                <div className="mj-kong-pay">💰 {k.pay}</div>
+                                <div className="mj-kong-note">{k.note}</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="mj-disclaimer">
+                Aturan dasar di atas berlaku umum untuk mahjong Cina. Detail seperti jumlah tumpukan tembok, cara melempar dadu, dan panggilan yang diperbolehkan bisa berbeda antar daerah — ikuti kebiasaan meja kamu kalau berbeda.
+              </div>
+            </>
+          )}
+
+          {guideTab === 'bayar' && (() => {
+            const seats = ['東 Timur (Banker)', '南 Selatan', '西 Barat', '北 Utara'];
+            const simDeltas = [0, 0, 0, 0];
+            const payers = simMethod === 'selfdraw'
+              ? [0, 1, 2, 3].filter((i) => i !== simWinner)
+              : [simDiscarder];
+            payers.forEach((p) => {
+              let amt = simValue;
+              if (simDouble && (simWinner === 0 || p === 0)) amt *= 2;
+              simDeltas[p] -= amt; simDeltas[simWinner] += amt;
+            });
+            return (
+              <>
+                <div className="mj-card">
+                  <div className="mj-label">Dua Aturan Inti</div>
+                  <div className="mj-rule-block">
+                    <div className="mj-rule-title">自摸 Self-draw — semua bayar</div>
+                    <p>Kalau kamu menang dari ubin yang kamu tarik sendiri, KETIGA lawan masing-masing membayar penuh. Jadi kamu menerima tiga kali lipat nilai tangan.</p>
+                  </div>
+                  <div className="mj-rule-block">
+                    <div className="mj-rule-title">放炮 Discard — hanya pembuang yang bayar</div>
+                    <p>Kalau kamu menang dari ubin buangan seseorang, hanya orang itu yang membayar. Dua pemain lain tidak keluar sepeser pun. Inilah kenapa membuang ubin berbahaya di akhir ronde jauh lebih mahal daripada terlihat.</p>
+                  </div>
+                  <div className="mj-rule-block">
+                    <div className="mj-rule-title">庄 Banker bayar & terima dobel</div>
+                    <p>Banker membayar dua kali lipat kalau kalah, dan menerima dua kali lipat kalau menang. Ini berlaku ke siapa pun lawannya. Beberapa meja meniadakan aturan ini — bisa dimatikan lewat pengaturan game.</p>
+                  </div>
+                </div>
+
+                <div className="mj-card">
+                  <div className="mj-label">Simulator: Siapa Bayar Siapa</div>
+                  <div className="mj-hint-text" style={{ textAlign: 'left', marginTop: 0, marginBottom: 10 }}>
+                    Ubah pilihannya, lihat langsung aliran uangnya.
+                  </div>
+
+                  <div className="mj-sim-label">Pemenang</div>
+                  <div className="mj-choice-row" style={{ marginBottom: 10 }}>
+                    {seats.map((sName, i) => (
+                      <button key={i} className={'mj-choice-btn' + (simWinner === i ? ' active' : '')}
+                        onClick={() => { setSimWinner(i); if (simDiscarder === i) setSimDiscarder((i + 1) % 4); }}>
+                        {sName.split(' ')[0]}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mj-sim-label">Cara menang</div>
+                  <div className="mj-segmented">
+                    <button className={simMethod === 'selfdraw' ? 'active' : ''} onClick={() => setSimMethod('selfdraw')}>自摸</button>
+                    <button className={simMethod === 'discard' ? 'active' : ''} onClick={() => setSimMethod('discard')}>放炮</button>
+                  </div>
+
+                  {simMethod === 'discard' && (
+                    <>
+                      <div className="mj-sim-label">Yang membuang</div>
+                      <div className="mj-choice-row" style={{ marginBottom: 10 }}>
+                        {[0, 1, 2, 3].filter((i) => i !== simWinner).map((i) => (
+                          <button key={i} className={'mj-choice-btn' + (simDiscarder === i ? ' active' : '')}
+                            onClick={() => setSimDiscarder(i)}>{seats[i].split(' ')[0]}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="mj-sim-label">Nilai tangan</div>
+                  <div className="mj-preset-row">
+                    {[1, 2, 3, 4, 5, 6, 8, 10].map((v) => (
+                      <button key={v} className={'mj-preset-chip' + (simValue === v ? ' active' : '')} onClick={() => setSimValue(v)}>{v}</button>
+                    ))}
+                  </div>
+
+                  <label className="mj-toggle-row" style={{ marginTop: 6 }}>
+                    <span>Banker bayar/terima dobel</span>
+                    <input type="checkbox" checked={simDouble} onChange={(e) => setSimDouble(e.target.checked)} />
+                  </label>
+
+                  <div className="mj-sim-result">
+                    {seats.map((sName, i) => (
+                      <div key={i} className={'mj-sim-row' + (i === simWinner ? ' winner' : '')}>
+                        <span className="mj-sim-seat">{sName}</span>
+                        <span className={'mj-sim-amt' + (simDeltas[i] > 0 ? ' positive' : simDeltas[i] < 0 ? ' negative' : '')}>
+                          {simDeltas[i] > 0 ? '+' : ''}{simDeltas[i]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mj-sim-explain">
+                    {simMethod === 'selfdraw'
+                      ? `${seats[simWinner].split(' ')[0]} menarik sendiri, jadi tiga lawan bayar masing-masing.`
+                      : `${seats[simDiscarder].split(' ')[0]} membuang ubin penutupnya, jadi dia sendirian yang menanggung.`}
+                    {simDouble && (simWinner === 0 || (simMethod === 'discard' && simDiscarder === 0) || simMethod === 'selfdraw')
+                      ? ' Bagian yang melibatkan banker dilipatduakan.' : ''}
+                  </div>
+                </div>
+
+                <div className="mj-card">
+                  <div className="mj-label">Bayar Bonus Saat Kong</div>
+                  <p className="mj-pattern-desc" style={{ marginBottom: 10 }}>
+                    Kong sering memicu pembayaran kecil langsung di tengah ronde, terpisah dari penyelesaian akhir. Siapa yang bayar tergantung jenis kongnya:
+                  </p>
+                  {KONG_TYPES.map((k) => (
+                    <div key={k.cn} className="mj-kong-row">
+                      <div className="mj-kong-head">
+                        <span className="mj-call-cn">{k.cn}</span>
+                        <span className="mj-kong-en">{k.en}</span>
+                      </div>
+                      <div className="mj-kong-pay">💰 {k.pay}</div>
+                    </div>
+                  ))}
+                  <div className="mj-caveat-box" style={{ marginTop: 12, marginBottom: 0 }}>
+                    Besar bonus kong tidak seragam. Ada meja yang memakai nominal tetap, ada yang menghitungnya sebagai fan/tai tambahan di akhir, dan ada yang tidak memakai bonus kong sama sekali — kong hanya memberi hak tarik ubin pengganti. Sepakati dulu sebelum main.
+                  </div>
+                </div>
+
+                <div className="mj-card">
+                  <div className="mj-label">Aturan Tanggung Jawab (包)</div>
+                  <p className="mj-pattern-desc">
+                    Di banyak meja ada aturan bahwa pemain yang "memberi makan" tangan besar menanggung bayaran seluruh meja, meski lawannya menang dengan self-draw. Contoh paling umum:
+                  </p>
+                  <div className="mj-liab-row"><strong>Naga ketiga</strong> — membuang naga yang melengkapi 大三元 terbuka lawan</div>
+                  <div className="mj-liab-row"><strong>Angin keempat</strong> — membuang angin yang melengkapi 大四喜 terbuka lawan</div>
+                  <div className="mj-liab-row"><strong>Pemberi kong</strong> — kalau lawan menang dari ubin pengganti kong (槓上開花), yang memberi ubin kongnya menanggung</div>
+                  <p className="mj-pattern-desc" style={{ marginTop: 10 }}>
+                    Aturan ini bikin pemain berpikir dua kali sebelum membuang ubin berbahaya ke tangan yang sudah jelas besar. Sifatnya opsional dan tidak dipakai semua meja.
+                  </p>
+                </div>
+
+                <div className="mj-card">
+                  <div className="mj-label">Setelah Ronde Selesai</div>
+                  <div className="mj-liab-row"><strong>Banker menang</strong> — banker tetap di tempat, streak bertambah (連庄). Sebagian meja menaikkan nilai tiap streak.</div>
+                  <div className="mj-liab-row"><strong>Banker kalah</strong> — banker pindah ke pemain berikutnya berlawanan jarum jam.</div>
+                  <div className="mj-liab-row"><strong>Seri (流局)</strong> — tidak ada yang bayar. Kebanyakan meja menahan banker di tempat.</div>
+                  <div className="mj-liab-row"><strong>Ganti putaran</strong> — setelah keempat pemain selesai jadi banker, angin putaran naik dari Timur ke Selatan, lalu Barat, lalu Utara.</div>
+                  <p className="mj-pattern-desc" style={{ marginTop: 10 }}>
+                    Permainan penuh berarti empat putaran angin. Banyak yang main satu putaran saja (東風戰) supaya selesai lebih cepat.
+                  </p>
+                </div>
+
+                <div className="mj-disclaimer">
+                  Sistem bayar adalah bagian mahjong yang paling banyak variasi rumahnya. Bagian yang hampir selalu sama: self-draw dibayar bertiga, discard dibayar sendirian. Selebihnya sebaiknya disepakati sebelum ronde pertama.
+                </div>
+              </>
+            );
+          })()}
         </div>
         {renderNav('guide')}
         {renderToast()}
@@ -1801,6 +2140,48 @@ const CSS = `
 .mj-compare-box{background:rgba(243,236,218,0.07);border-radius:8px;padding:8px 4px;text-align:center;}
 .mj-compare-label{font-family:'Noto Serif TC',serif;font-size:11px;opacity:0.7;}
 .mj-compare-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--gold);margin-top:2px;}
+
+.mj-basic-card{padding:14px 16px;}
+.mj-basic-head{display:flex;align-items:center;gap:12px;cursor:pointer;}
+.mj-basic-glyph{font-family:'Noto Serif TC',serif;font-size:20px;font-weight:700;background:var(--tile-ivory);color:var(--ink);width:38px;height:46px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 0 rgba(0,0,0,0.3);}
+.mj-basic-title{flex:1;font-weight:700;font-size:14.5px;line-height:1.35;}
+.mj-basic-body{margin-top:12px;border-top:1px solid rgba(243,236,218,0.1);padding-top:10px;}
+.mj-basic-body p{font-size:13px;line-height:1.6;opacity:0.85;margin:0 0 10px;}
+.mj-comp-row{margin-bottom:10px;}
+.mj-comp-head{display:flex;justify-content:space-between;font-size:12px;opacity:0.7;margin-bottom:4px;}
+.mj-comp-count{font-family:'IBM Plex Mono',monospace;color:var(--gold);}
+.mj-comp-total{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--gold);background:rgba(199,154,59,0.12);padding:9px 12px;border-radius:8px;text-align:center;margin-top:4px;}
+.mj-seatmap{position:relative;display:grid;grid-template-columns:1fr 1.1fr 1fr;grid-template-areas:". top ." "left center right" ". bottom .";gap:6px;margin-top:8px;}
+.mj-seatmap-cell{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.18);border-radius:9px;padding:8px 4px;text-align:center;display:flex;flex-direction:column;gap:2px;font-size:10.5px;opacity:0.85;}
+.mj-seatmap-cell.dealer{border-color:var(--gold);background:rgba(199,154,59,0.15);opacity:1;}
+.mj-seatmap-cell.top{grid-area:top;} .mj-seatmap-cell.left{grid-area:left;}
+.mj-seatmap-cell.right{grid-area:right;} .mj-seatmap-cell.bottom{grid-area:bottom;}
+.mj-seatmap-w{font-family:'Noto Serif TC',serif;font-size:17px;font-weight:700;color:var(--gold);}
+.mj-seatmap-center{grid-area:center;text-align:center;}
+.mj-seatmap-arrow{font-size:28px;color:var(--gold);line-height:1;}
+.mj-seatmap-note{font-size:9.5px;opacity:0.6;margin-top:2px;line-height:1.3;}
+.mj-call-row,.mj-kong-row{background:rgba(243,236,218,0.06);border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+.mj-call-head,.mj-kong-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+.mj-call-cn{font-family:'Noto Serif TC',serif;font-size:15px;font-weight:700;}
+.mj-call-prio{font-size:10px;color:var(--gold);opacity:0.9;}
+.mj-kong-en{font-size:11px;opacity:0.6;}
+.mj-call-desc{font-size:12.5px;line-height:1.55;opacity:0.8;margin-top:4px;}
+.mj-kong-pay{font-size:12.5px;line-height:1.5;color:var(--gold);margin-top:6px;}
+.mj-kong-note{font-size:11.5px;opacity:0.6;margin-top:4px;line-height:1.45;}
+.mj-rule-block{margin-bottom:12px;}
+.mj-rule-block:last-child{margin-bottom:0;}
+.mj-rule-title{font-family:'Noto Serif TC',serif;font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;}
+.mj-rule-block p{font-size:12.5px;line-height:1.6;opacity:0.85;margin:0;}
+.mj-sim-label{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.55;margin-bottom:6px;font-weight:600;}
+.mj-sim-result{margin-top:14px;border-top:1px solid rgba(243,236,218,0.12);padding-top:10px;}
+.mj-sim-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;margin-bottom:4px;background:rgba(243,236,218,0.05);}
+.mj-sim-row.winner{background:rgba(91,140,105,0.2);border:1px solid rgba(91,140,105,0.5);}
+.mj-sim-seat{font-size:12.5px;}
+.mj-sim-amt{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:15px;opacity:0.5;}
+.mj-sim-amt.positive{color:var(--bamboo);opacity:1;} .mj-sim-amt.negative{color:#ff8a7a;opacity:1;}
+.mj-sim-explain{font-size:11.5px;opacity:0.6;line-height:1.5;margin-top:8px;}
+.mj-liab-row{font-size:12.5px;line-height:1.55;padding:8px 0;border-bottom:1px solid rgba(243,236,218,0.08);opacity:0.88;}
+.mj-liab-row:last-of-type{border-bottom:none;}
 .mj-disclaimer{font-size:11.5px;opacity:0.5;line-height:1.55;padding:10px 4px;}
 .mj-quiz-options{display:grid;gap:8px;margin-top:10px;}
 .mj-quiz-opt{background:rgba(243,236,218,0.08);border:1px solid rgba(243,236,218,0.2);color:var(--tile-ivory);padding:11px 14px;border-radius:10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:1px;}
